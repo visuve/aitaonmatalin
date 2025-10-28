@@ -13,11 +13,15 @@ FetchContent_Declare(SFML
 	GIT_TAG 3.0.x)
 FetchContent_MakeAvailable(SFML)
 
-
 file(GLOB_RECURSE AITAONMATALIN_SRC "src/*.cpp" "src/*.hpp")
-add_executable(aitaonmatalin ${AITAONMATALIN_SRC})
+
+if(WIN32 AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+	add_executable(aitaonmatalin WIN32 ${AITAONMATALIN_SRC})
+else()
+	add_executable(aitaonmatalin ${AITAONMATALIN_SRC})
+endif()
 
 target_precompile_headers(aitaonmatalin PUBLIC "src/Mega.pch")
 
 target_include_directories(aitaonmatalin PRIVATE "src")
-target_link_libraries(aitaonmatalin PRIVATE sfml-graphics)
+target_link_libraries(aitaonmatalin PRIVATE SFML::Graphics SFML::Main)
