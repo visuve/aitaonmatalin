@@ -1,10 +1,10 @@
 namespace aita
 {
-	constexpr uint32_t WindowWidth = 800;
-	constexpr uint32_t WindowHeight = 600;
+	constexpr float WindowWidth = 1600.0f;
+	constexpr float WindowHeight = 1200.0f;
 
-	constexpr float FenceWidth = 20.0f;
-	constexpr float FenceHeight = 200.0f;
+	constexpr float FenceWidth = WindowWidth / 40.0f;
+	constexpr float FenceHeight = WindowHeight / 3.0f;
 	constexpr float FenceHalf = FenceWidth / 2.0f;
 	constexpr float FenceX = WindowWidth / 2 - FenceHalf;
 	constexpr float FenceY = WindowHeight - FenceHeight;
@@ -12,15 +12,16 @@ namespace aita
 	constexpr float FenceMiddle = FenceLeft + FenceHalf;
 	constexpr float FenceRight = FenceLeft + FenceWidth;
 
-	float Gravity = 0.5f;
-	constexpr float JumpVelocity = -16.0f;
-	constexpr float HitPenaltyHorizontal = 15.0f;
-	constexpr float HitPenaltyVertical = 10.0f;
+	float Gravity = WindowHeight / 1200.0f;
+	constexpr float JumpVelocity = -(WindowHeight / 37.5f);
+	constexpr float MoveVelocity = WindowWidth / 160.0f;
+	constexpr float HitPenaltyHorizontal = WindowWidth / 53.33f;
+	constexpr float HitPenaltyVertical = WindowHeight / 60.0f;
 
 	class Player : public sf::Drawable
 	{
 	public:
-		static constexpr float Radius = 40.0f;
+		static constexpr float Radius = (WindowWidth + WindowHeight) / 35.0f;
 		static constexpr float Diameter = Radius * 2.0f;
 		static constexpr float MinimumX = 0.0f;
 		static constexpr float MaximumX = WindowWidth - Diameter;
@@ -127,53 +128,31 @@ namespace aita
 		sf::CircleShape _shape;
 	};
 
-	auto c = [](uint16_t duration) { _beep(261, duration); };
-	auto cis = [](uint16_t duration) { _beep(278, duration); };
-	auto d = [](uint16_t duration) { _beep(294, duration); };
-	auto dis = [](uint16_t duration) { _beep(311, duration); };
-	auto e = [](uint16_t duration) { _beep(330, duration); };
-	auto f = [](uint16_t duration) { _beep(349, duration); };
-	auto fis = [](uint16_t duration) { _beep(370, duration); };
-	auto g = [](uint16_t duration) { _beep(392, duration); };
-	auto gis = [](uint16_t duration) { _beep(415, duration); };
-	auto a = [](uint16_t duration) { _beep(440, duration); };
-	auto ais = [](uint16_t duration) { _beep(466, duration); };
-	auto h = [](uint16_t duration) { _beep(494, duration); };
-	auto a2 = [](uint16_t duration) { _beep(220, duration); };
-	auto h2 = [](uint16_t duration) { _beep(247, duration); };
-	auto p = [](uint16_t duration) { _beep(0, duration); };
+	constexpr float LowNote = 50.0f;
+	constexpr float HighNote = 5000.0f;
+	constexpr float NoteStep = 1.5f;
+	constexpr uint32_t NoteDuration = 60;
 
 	void lose()
 	{
-		p(100);
-		h(200);
-		ais(200);
-		a(200);
-		gis(200);
-		g(200);
-		fis(200);
-		f(200);
-		e(200);
-		dis(200);
-		d(200);
-		cis(200);
-		c(500);
+#ifdef WIN32
+		for (float note = HighNote; note >= LowNote; note /= NoteStep)
+		{
+			_beep(static_cast<uint32_t>(note), NoteDuration);
+		}
 		_sleep(500);
+#endif
 	}
 
 	void win()
 	{
-		p(100);
-		e(200); p(100);
-		dis(200); p(100);
-		e(200); p(100);
-		dis(200); p(100);
-		e(200); p(100);
-		h2(200); p(100);
-		d(200); p(100);
-		c(200); p(100);
-		a2(500); p(100);
-		_sleep(1000);
+#ifdef WIN32
+		for (float note = LowNote; note <= HighNote; note *= NoteStep)
+		{
+			_beep(static_cast<uint32_t>(note), NoteDuration);
+		}
+		_sleep(500);
+#endif
 	}
 }
 
@@ -186,7 +165,13 @@ int main(int argc, char** argv)
 		aita::Gravity = 0.0f;
 	}
 
-	sf::RenderWindow window(sf::VideoMode({ aita::WindowWidth, aita::WindowHeight }, 8), "Aita on matalin");
+	sf::VideoMode videoMode(
+	{
+		static_cast<uint32_t>(aita::WindowWidth),
+		static_cast<uint32_t>(aita::WindowHeight)
+	}, 8);
+
+	sf::RenderWindow window(videoMode, "Aita on matalin");
 
 	window.setVerticalSyncEnabled(true);
 	window.setFramerateLimit(30);
@@ -221,24 +206,24 @@ int main(int argc, char** argv)
 
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))
 		{
-			player.move({ 4.0f, 0.0f });
+			player.move({ aita::MoveVelocity, 0.0f });
 		}
 
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))
 		{
-			player.move({ -4.0f, 0.0f });
+			player.move({ -aita::MoveVelocity, 0.0f });
 		}
 
 		if (aita::Gravity == 0.0f)
 		{
 			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))
 			{
-				player.move({ 0.0f, -2.0f });
+				player.move({ 0.0f, -aita::MoveVelocity });
 			}
 
 			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))
 			{
-				player.move({ 0.0f, 2.0f });
+				player.move({ 0.0f, aita::MoveVelocity });
 			}
 		}
 
