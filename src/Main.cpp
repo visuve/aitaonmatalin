@@ -96,7 +96,7 @@ namespace aita
 					_position.x -= HitPenaltyHorizontal;
 					_position.y += HitPenaltyVertical;
 				}
-				
+
 				if (playerCenter > FenceMiddle)
 				{
 					_shape.setFillColor(sf::Color::Magenta);
@@ -111,6 +111,11 @@ namespace aita
 			}
 		}
 
+		sf::Vector2f bottomRight() const
+		{
+			return { _position.x + Diameter, _position.y + Diameter };
+		}
+
 	private:
 		void draw(sf::RenderTarget& target, sf::RenderStates states) const override
 		{
@@ -121,6 +126,55 @@ namespace aita
 		sf::Vector2f _velocity;
 		sf::CircleShape _shape;
 	};
+
+	auto c = [](uint16_t duration) { _beep(261, duration); };
+	auto cis = [](uint16_t duration) { _beep(278, duration); };
+	auto d = [](uint16_t duration) { _beep(294, duration); };
+	auto dis = [](uint16_t duration) { _beep(311, duration); };
+	auto e = [](uint16_t duration) { _beep(330, duration); };
+	auto f = [](uint16_t duration) { _beep(349, duration); };
+	auto fis = [](uint16_t duration) { _beep(370, duration); };
+	auto g = [](uint16_t duration) { _beep(392, duration); };
+	auto gis = [](uint16_t duration) { _beep(415, duration); };
+	auto a = [](uint16_t duration) { _beep(440, duration); };
+	auto ais = [](uint16_t duration) { _beep(466, duration); };
+	auto h = [](uint16_t duration) { _beep(494, duration); };
+	auto a2 = [](uint16_t duration) { _beep(220, duration); };
+	auto h2 = [](uint16_t duration) { _beep(247, duration); };
+	auto p = [](uint16_t duration) { _beep(0, duration); };
+
+	void lose()
+	{
+		p(100);
+		h(200);
+		ais(200);
+		a(200);
+		gis(200);
+		g(200);
+		fis(200);
+		f(200);
+		e(200);
+		dis(200);
+		d(200);
+		cis(200);
+		c(500);
+		_sleep(500);
+	}
+
+	void win()
+	{
+		p(100);
+		e(200); p(100);
+		dis(200); p(100);
+		e(200); p(100);
+		dis(200); p(100);
+		e(200); p(100);
+		h2(200); p(100);
+		d(200); p(100);
+		c(200); p(100);
+		a2(500); p(100);
+		_sleep(1000);
+	}
 }
 
 int main(int argc, char** argv)
@@ -159,6 +213,8 @@ int main(int argc, char** argv)
 	fence.setFillColor(sf::Color::Red);
 	fence.setPosition({ aita::FenceX, aita::FenceY});
 
+	size_t ticks = 0;
+
 	while (window.isOpen())
 	{
 		window.handleEvents(onClose, onKeyPressed);
@@ -189,8 +245,22 @@ int main(int argc, char** argv)
 		player.update();
 
 		window.clear();
+
 		window.draw(fence);
 		window.draw(player);
+
+		if (player.bottomRight().x >= aita::WindowWidth && 
+			player.bottomRight().y >= aita::WindowHeight)
+		{
+			aita::win();
+			return 0;
+		}
+
+		if (++ticks > 300)
+		{
+			aita::lose();
+			return 1;
+		}
 
 		window.display();
 	}
