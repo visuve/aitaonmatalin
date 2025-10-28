@@ -8,7 +8,7 @@ namespace aita
 	constexpr float FenceX = WindowWidth / 2 - FenceWidth / 2;
 	constexpr float FenceY = WindowHeight - FenceHeight;
 
-	constexpr float Gravity = 0.5f;
+	float Gravity = 0.5f;
 
 	class Player : public sf::Drawable
 	{
@@ -115,9 +115,14 @@ namespace aita
 	};
 }
 
-int main()
+int main(int argc, char** argv)
 {
 	aita::Player player;
+
+	if (argc > 1 && std::string(argv[1]) == "--no-gravity")
+	{
+		aita::Gravity = 0.0f;
+	}
 
 	sf::RenderWindow window(sf::VideoMode({ aita::WindowWidth, aita::WindowHeight }, 8), "Aita on matalin");
 
@@ -160,17 +165,18 @@ int main()
 			player.move({ -4.0f, 0.0f });
 		}
 
-		// TODO: add a no gravity mode where up and down keys move the player freely
-
-		/*if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))
+		if (aita::Gravity == 0.0f)
 		{
-			player.move({ 0.0f, -2.0f });
+			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))
+			{
+				player.move({ 0.0f, -2.0f });
+			}
+
+			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))
+			{
+				player.move({ 0.0f, 2.0f });
+			}
 		}
-
-		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))
-		{
-			player.move({ 0.0f, 2.0f });
-		}*/
 
 		player.update();
 
