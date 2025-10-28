@@ -5,10 +5,17 @@ namespace aita
 
 	constexpr float FenceWidth = 20.0f;
 	constexpr float FenceHeight = 200.0f;
-	constexpr float FenceX = WindowWidth / 2 - FenceWidth / 2;
+	constexpr float FenceHalf = FenceWidth / 2.0f;
+	constexpr float FenceX = WindowWidth / 2 - FenceHalf;
 	constexpr float FenceY = WindowHeight - FenceHeight;
+	constexpr float FenceLeft = FenceX;
+	constexpr float FenceMiddle = FenceLeft + FenceHalf;
+	constexpr float FenceRight = FenceLeft + FenceWidth;
 
 	float Gravity = 0.5f;
+	constexpr float JumpVelocity = -16.0f;
+	constexpr float HitPenaltyHorizontal = 15.0f;
+	constexpr float HitPenaltyVertical = 10.0f;
 
 	class Player : public sf::Drawable
 	{
@@ -19,7 +26,6 @@ namespace aita
 		static constexpr float MaximumX = WindowWidth - Diameter;
 		static constexpr float MinimumY = 0.0f;
 		static constexpr float MaximumY = WindowHeight - Diameter;
-		static constexpr float JumpVelocity = -16.0f;
 
 		Player() :
 			_shape(Radius, 8),
@@ -77,23 +83,25 @@ namespace aita
 
 			_shape.setPosition(_position);
 
+			const float playerLeft = _position.x;
+			const float playerRight = _position.x + Diameter;
+			const float playerCenter = _position.x + Radius;
+
 			// Fence collision
-			if (_position.y > FenceY - Diameter)
+			if (_position.y > FenceY - Diameter && playerRight > FenceLeft && playerLeft < FenceRight)
 			{
-				if (_position.x > FenceX + FenceWidth)
+				if (playerCenter < FenceMiddle)
 				{
-					// Right hit
-					_shape.setFillColor(sf::Color::Cyan);
-				}
-				else if (_position.x > FenceX - Diameter)
-				{
-					// Left hit
 					_shape.setFillColor(sf::Color::Blue);
+					_position.x -= HitPenaltyHorizontal;
+					_position.y += HitPenaltyVertical;
 				}
-				else
+				
+				if (playerCenter > FenceMiddle)
 				{
-					// Below fence, no hit
-					_shape.setFillColor(sf::Color::Green);
+					_shape.setFillColor(sf::Color::Magenta);
+					_position.x += HitPenaltyHorizontal;
+					_position.y += HitPenaltyVertical;
 				}
 			}
 			else
