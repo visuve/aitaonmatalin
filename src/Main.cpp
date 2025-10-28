@@ -211,7 +211,7 @@ int main(int argc, char** argv)
 
 	sf::RectangleShape fence({ aita::FenceWidth, aita::FenceHeight });
 	fence.setFillColor(sf::Color::Red);
-	fence.setPosition({ aita::FenceX, aita::FenceY});
+	fence.setPosition({ aita::FenceX, aita::FenceY });
 
 	size_t ticks = 0;
 
@@ -245,23 +245,23 @@ int main(int argc, char** argv)
 		player.update();
 
 		window.clear();
-
 		window.draw(fence);
 		window.draw(player);
+		window.display();
 
-		if (player.bottomRight().x >= aita::WindowWidth && 
+		if (player.bottomRight().x >= aita::WindowWidth &&
 			player.bottomRight().y >= aita::WindowHeight)
 		{
 			aita::win();
-			return 0;
+			return ticks;
 		}
 
 		if (++ticks > 300)
 		{
 			aita::lose();
-			return 1;
+			return 0;
 		}
-
-		window.display();
 	}
+
+	return -1;
 }

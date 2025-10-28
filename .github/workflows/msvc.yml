@@ -18,7 +18,7 @@ jobs:
     - name: Print Hashes
       shell: pwsh
       run: |
-        Get-ChildItem "out/bin/Release/*.exe" | Get-FileHash -Algorithm SHA256 | Format-List | Tee-Object Hashes.txt
+        Get-ChildItem "out/bin/Release/*.exe" | Get-FileHash -Algorithm SHA256 | Format-List | Tee-Object hashes.txt
 
     - name: Create Release
       uses: "marvinpinto/action-automatic-releases@v1.2.1"
@@ -28,5 +28,5 @@ jobs:
           prerelease: true
           title: "Automated release (latest commit)"
           files: |
-            Hashes.txt
+            hashes.txt
             out/bin/Release/*.exe
