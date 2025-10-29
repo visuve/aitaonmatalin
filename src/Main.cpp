@@ -158,11 +158,16 @@ namespace aita
 
 int main(int argc, char** argv)
 {
+	torch::Device device(torch::kCPU);
+	torch::Tensor tensor(torch::rand({ 3, 3 }, device));
+	std::cout << tensor << std::endl;
+
 	aita::Player player;
 
 	if (argc > 1 && std::string(argv[1]) == "--no-gravity")
 	{
 		aita::Gravity = 0.0f;
+		std::println("Gravity disabled");
 	}
 
 	sf::VideoMode videoMode(
