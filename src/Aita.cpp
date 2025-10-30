@@ -45,6 +45,7 @@ namespace aita
 		FenceRight(FenceLeft + FenceWidth),
 		Gravity(WindowHeight / 1200.0f),
 		JumpVelocity(-(WindowHeight / 37.5f)),
+		Friction(WindowWidth / 100.0f),
 		MoveVelocity(WindowWidth / 160.0f),
 		HitPenaltyHorizontal(WindowWidth / 53.33f),
 		HitPenaltyVertical(WindowHeight / 60.0f)
@@ -85,7 +86,7 @@ namespace aita
 
 	void Player::move(sf::Vector2f direction)
 	{
-		_position += direction;
+		_velocity += direction;
 	}
 
 	void Player::update()
@@ -100,6 +101,11 @@ namespace aita
 		else if (_position.x >= MaximumX)
 		{
 			_position.x = MaximumX;
+		}
+		else
+		{
+			// Apply friction
+			_velocity.x /= _config.Friction;
 		}
 
 		if (_position.y < MinimumY)

@@ -22,7 +22,10 @@ namespace aita
 
 		float Gravity;
 		const float JumpVelocity;
+
+		float Friction;
 		const float MoveVelocity;
+
 		const float HitPenaltyHorizontal;
 		const float HitPenaltyVertical;
 
