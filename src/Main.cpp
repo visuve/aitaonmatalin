@@ -154,21 +154,147 @@ namespace aita
 		_sleep(500);
 #endif
 	}
+
+	constexpr uint32_t FramesPerSecond = 30;
+	constexpr int32_t TimeOut = FramesPerSecond * 10;
+
+	int32_t play(sf::RenderWindow& window)
+	{
+		aita::Player player;
+
+		const auto onClose = [&window](const sf::Event::Closed&)
+		{
+			window.close();
+		};
+
+		const auto onKeyPressed = [&window, &player](const sf::Event::KeyPressed& keyPressed)
+		{
+			if (keyPressed.scancode == sf::Keyboard::Scancode::Escape)
+			{
+				window.close();
+			}
+
+			if (keyPressed.scancode == sf::Keyboard::Scancode::Space)
+			{
+				player.jump();
+			}
+		};
+
+		sf::RectangleShape fence({ aita::FenceWidth, aita::FenceHeight });
+		fence.setFillColor(sf::Color::Red);
+		fence.setPosition({ aita::FenceX, aita::FenceY });
+
+		int32_t ticks = 0;
+
+		while (window.isOpen())
+		{
+			window.handleEvents(onClose, onKeyPressed);
+
+			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))
+			{
+				player.move({ aita::MoveVelocity, 0.0f });
+			}
+
+			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))
+			{
+				player.move({ -aita::MoveVelocity, 0.0f });
+			}
+
+			if (aita::Gravity == 0.0f)
+			{
+				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))
+				{
+					player.move({ 0.0f, -aita::MoveVelocity });
+				}
+
+				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))
+				{
+					player.move({ 0.0f, aita::MoveVelocity });
+				}
+			}
+
+			player.update();
+
+			window.clear();
+			window.draw(fence);
+			window.draw(player);
+			window.display();
+
+			if (player.bottomRight().x >= aita::WindowWidth &&
+				player.bottomRight().y >= aita::WindowHeight)
+			{
+				aita::win();
+				break;
+			}
+
+			if (++ticks > 300)
+			{
+				aita::lose();
+				break;
+			}
+		}
+
+		return TimeOut - ticks;
+	}
+
+	class Arguments
+	{
+	public:
+		Arguments(int argc, char** argv) :
+			_arguments(argv + 1, argv + argc)
+		{
+		}
+
+		std::string_view operator[](std::string_view flag)
+		{
+			return find(flag);
+		}
+
+		bool contains(const std::string_view flag) const
+		{
+			return find(flag) != "not found";
+		}
+
+	private:
+		std::string_view find(std::string_view flag) const
+		{
+			for (std::string_view argument : _arguments)
+			{
+				if (!argument.starts_with(flag))
+				{
+					continue;
+				}
+
+				size_t equalSignIndex = argument.find_last_of('=');
+
+				if (equalSignIndex == std::string::npos)
+				{
+					return argument;
+				}
+
+				return argument.substr(++equalSignIndex);
+			}
+
+			return "not found";
+		}
+
+		std::vector<std::string> _arguments;
+	};
 }
 
 int main(int argc, char** argv)
 {
-	torch::Device device(torch::kCPU);
-	torch::Tensor tensor(torch::rand({ 3, 3 }, device));
-	std::cout << tensor << std::endl;
+	aita::Arguments arguments(argc, argv);
 
-	aita::Player player;
-
-	if (argc > 1 && std::string(argv[1]) == "--no-gravity")
+	if (arguments.contains("--no-gravity"))
 	{
 		aita::Gravity = 0.0f;
 		std::println("Gravity disabled");
 	}
+
+	torch::Device device(torch::kCPU);
+	torch::Tensor tensor(torch::rand({ 3, 3 }, device));
+	std::cout << tensor << std::endl;
 
 	sf::VideoMode videoMode(
 	{
@@ -177,81 +303,14 @@ int main(int argc, char** argv)
 	}, 8);
 
 	sf::RenderWindow window(videoMode, "Aita on matalin");
-
 	window.setVerticalSyncEnabled(true);
-	window.setFramerateLimit(30);
+	window.setFramerateLimit(aita::FramesPerSecond);
 
-	const auto onClose = [&window](const sf::Event::Closed&)
+	do 
 	{
-		window.close();
-	};
+		std::println("Score: {}", aita::play(window));
 
-	const auto onKeyPressed = [&window, &player](const sf::Event::KeyPressed& keyPressed)
-	{
-		if (keyPressed.scancode == sf::Keyboard::Scancode::Escape)
-		{
-			window.close();
-		}
+	} while (window.isOpen() && arguments.contains("--loop"));
 
-		if (keyPressed.scancode == sf::Keyboard::Scancode::Space)
-		{
-			player.jump();
-		}
-	};
-
-	sf::RectangleShape fence({ aita::FenceWidth, aita::FenceHeight });
-	fence.setFillColor(sf::Color::Red);
-	fence.setPosition({ aita::FenceX, aita::FenceY });
-
-	size_t ticks = 0;
-
-	while (window.isOpen())
-	{
-		window.handleEvents(onClose, onKeyPressed);
-
-		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))
-		{
-			player.move({ aita::MoveVelocity, 0.0f });
-		}
-
-		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))
-		{
-			player.move({ -aita::MoveVelocity, 0.0f });
-		}
-
-		if (aita::Gravity == 0.0f)
-		{
-			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))
-			{
-				player.move({ 0.0f, -aita::MoveVelocity });
-			}
-
-			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))
-			{
-				player.move({ 0.0f, aita::MoveVelocity });
-			}
-		}
-
-		player.update();
-
-		window.clear();
-		window.draw(fence);
-		window.draw(player);
-		window.display();
-
-		if (player.bottomRight().x >= aita::WindowWidth &&
-			player.bottomRight().y >= aita::WindowHeight)
-		{
-			aita::win();
-			return ticks;
-		}
-
-		if (++ticks > 300)
-		{
-			aita::lose();
-			return 0;
-		}
-	}
-
-	return -1;
+	return 0;
 }
