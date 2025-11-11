@@ -51,6 +51,10 @@ namespace aita
 		sf::Vector2f bottomRight() const;
 		void draw(sf::RenderTarget& target, sf::RenderStates states) const override;
 
+		sf::Vector2f position() const;
+		sf::Vector2f velocity() const;
+		bool isMoving() const;
+
 	private:
 		const aita::Configuration& _config;
 		sf::Vector2f _position;
@@ -75,4 +79,6 @@ namespace aita
 		sf::RenderWindow _window;
 		sf::RectangleShape _fence;
 	};
+
+	std::ostream& operator << (std::ostream&, const Player&);
 }

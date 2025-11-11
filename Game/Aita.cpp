@@ -2,36 +2,6 @@
 
 namespace aita
 {
-	namespace snd
-	{
-		constexpr float LowNote = 50.0f;
-		constexpr float HighNote = 5000.0f;
-		constexpr float NoteStep = 1.5f;
-		constexpr uint32_t NoteDuration = 60;
-
-		void lose()
-		{
-#ifdef WIN32
-			for (float note = HighNote; note >= LowNote; note /= NoteStep)
-			{
-				_beep(static_cast<uint32_t>(note), NoteDuration);
-			}
-			_sleep(500);
-#endif
-		}
-
-		void win()
-		{
-#ifdef WIN32
-			for (float note = LowNote; note <= HighNote; note *= NoteStep)
-			{
-				_beep(static_cast<uint32_t>(note), NoteDuration);
-			}
-			_sleep(500);
-#endif
-		}
-	}
-
 	Configuration::Configuration(float width, float height) :
 		WindowWidth(width),
 		WindowHeight(height),
@@ -130,7 +100,9 @@ namespace aita
 		const float playerCenter = _position.x + Radius;
 
 		// Fence collision
-		if (_position.y > _config.FenceY - Diameter && playerRight > _config.FenceLeft && playerLeft < _config.FenceRight)
+		if (_position.y > _config.FenceY - Diameter &&
+			playerRight > _config.FenceLeft &&
+			playerLeft < _config.FenceRight)
 		{
 			if (playerCenter < _config.FenceMiddle)
 			{
@@ -161,6 +133,23 @@ namespace aita
 	void Player::draw(sf::RenderTarget& target, sf::RenderStates states) const
 	{
 		target.draw(_shape, states);
+	}
+
+	sf::Vector2f Player::position() const
+	{
+		return _position;
+	}
+
+	sf::Vector2f Player::velocity() const
+	{
+		return _velocity;
+	}
+
+	bool Player::isMoving() const
+	{
+		constexpr float minVelocity = 0.1f;
+		return (_velocity.x > minVelocity || _velocity.x < -minVelocity) ||
+			(_velocity.y > minVelocity || _velocity.y < -minVelocity);
 	}
 
 	Game::Game(float width, float height) :
@@ -211,18 +200,21 @@ namespace aita
 			if (_player.bottomRight().x >= Config.WindowWidth &&
 				_player.bottomRight().y >= Config.WindowHeight)
 			{
-				snd::win();
 				break;
 			}
 
 			if (!--score)
 			{
-				snd::lose();
 				break;
+			}
+
+			if (_player.isMoving())
+			{
+				std::cout << _player << std::endl;
 			}
 		}
 
-		return score;
+		return _window.isOpen() ? score : 0;
 	}
 
 	void Game::onClose(const sf::Event::Closed& closed)
@@ -268,5 +260,16 @@ namespace aita
 		{
 			_player.move({ 0.0f, Config.MoveVelocity });
 		}
+	}
+
+	std::ostream& operator << (std::ostream& os, const Player& player)
+	{
+		const auto pos = player.position();
+		os << pos.x << ' ' << pos.y;
+
+		const auto vel = player.velocity();
+		os << ' ' << vel.x << ' ' << vel.y;
+
+		return os;
 	}
 }
