@@ -1,5 +1,0 @@
-#include <SFML/Graphics.hpp>
-
-#include <torch/torch.h>
-
-#include <print>
