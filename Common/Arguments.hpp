@@ -13,7 +13,7 @@ namespace aita
 		template <typename T>
 		T get(std::string_view flag, T defaultValue) const
 		{
-			const std::string& value = find(flag);
+			const std::string value = find(flag);
 
 			if (value == "not found")
 			{
@@ -63,7 +63,7 @@ namespace aita
 		{
 			for (const std::string& argument : _arguments)
 			{
-				if (!argument.starts_with(flag))
+				if (!argument.starts_with(flag) || !flag.starts_with(argument))
 				{
 					continue;
 				}
