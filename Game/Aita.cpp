@@ -64,13 +64,15 @@ namespace aita
 		_position += _velocity;
 
 		// Boundary collision / clamping
-		if (_position.x < MinimumX)
+		if (_position.x <= MinimumX)
 		{
 			_position.x = MinimumX;
+			_velocity.x = 0.0f;
 		}
 		else if (_position.x >= MaximumX)
 		{
 			_position.x = MaximumX;
+			_velocity.x = 0.0f;
 		}
 		else
 		{
@@ -78,14 +80,15 @@ namespace aita
 			_velocity.x /= _config.Friction;
 		}
 
-		if (_position.y < MinimumY)
+		if (_position.y <= MinimumY)
 		{
 			_position.y = MinimumY;
+			_velocity.y = 0.0f;
 		}
 		else if (_position.y >= MaximumY)
 		{
 			_position.y = MaximumY;
-			_velocity.y = 0.0f; // Back to ground
+			_velocity.y = 0.0f;
 		}
 		else
 		{
