@@ -12,15 +12,28 @@ namespace aita
 	{
 	}
 
-	void KeyPress::execute(std::chrono::steady_clock::time_point then)
+	void KeyPress::execute(std::stop_source stop_source, std::chrono::steady_clock::time_point then)
 	{
+		std::stop_token token = stop_source.get_token();
+
 		const auto offset = std::chrono::steady_clock::now() - then;
 
+		if (token.stop_requested())	{ return; }
 		std::this_thread::sleep_for(_from - offset);
+
+		if (token.stop_requested()) { return; }
 		keybd_event(_key, 0, KeyDown, 0);
 
+		if (token.stop_requested()) { return; }
 		std::this_thread::sleep_for(_to - _from);
+
+		if (token.stop_requested()) { return; }
 		keybd_event(_key, 0, KeyUp, 0);
+	}
+
+	Keyboard::~Keyboard()
+	{
+		_stopSource.request_stop();
 	}
 
 	Keyboard& Keyboard::operator<<(KeyPress&& key)
@@ -35,7 +48,7 @@ namespace aita
 
 		for (KeyPress& key : _keys)
 		{
-			_threads.emplace_back(&KeyPress::execute, &key, startTime);
+			_threads.emplace_back(&KeyPress::execute, &key, _stopSource, startTime);
 		}
 	}
 }
