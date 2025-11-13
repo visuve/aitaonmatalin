@@ -89,26 +89,29 @@ namespace aita
 
 	void Process::redirect(void* where)
 	{
-		while (isRunning())
+		_thread = std::jthread([this, where]()
 		{
-			std::string output = read();
+			while (isRunning())
+			{
+				std::string output = read();
 
-			if (output.empty())
-			{
-				continue;
+				if (output.empty())
+				{
+					continue;
+				}
+
+				if (!WriteFile(where, output.data(), static_cast<DWORD>(output.size()), nullptr, nullptr))
+				{
+					throw std::runtime_error("Failed to write to standard output.");
+				}
 			}
-			
-			if (!WriteFile(where, output.data(), static_cast<DWORD>(output.size()), nullptr, nullptr))
-			{
-				throw std::runtime_error("Failed to write to standard output.");
-			}
-		}
+		});
 	}
 
 	std::string Process::read()
 	{
 		constexpr size_t bufferSize = 0x1000;
-		char buffer[bufferSize];
+		thread_local char buffer[bufferSize];
 
 		DWORD bytesRead = 0;
 

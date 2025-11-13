@@ -1,6 +1,7 @@
 #include <torch/torch.h>
 
 #include <filesystem>
+#include <thread>
 
 #if defined(_WIN32)
 #include <Windows.h>

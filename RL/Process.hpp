@@ -19,6 +19,7 @@ namespace aita
 	private:
 		const std::filesystem::path _path;
 		std::wstring _arguments;
+		std::jthread _thread;
 
 #ifdef WIN32
 		STARTUPINFOW _startupInfo;
