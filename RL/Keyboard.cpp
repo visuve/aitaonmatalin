@@ -5,10 +5,10 @@ namespace aita
 	constexpr DWORD KeyDown = 0x0000;
 	constexpr DWORD KeyUp = 0x0002;
 
-	KeyPress::KeyPress(uint8_t key, int32_t from, int32_t to) :
+	KeyPress::KeyPress(uint8_t key, std::chrono::milliseconds from, std::chrono::milliseconds to) :
 		_key(key),
-		_from(std::chrono::milliseconds(from)),
-		_to(std::chrono::milliseconds(to))
+		_from(from),
+		_to(to)
 	{
 	}
 

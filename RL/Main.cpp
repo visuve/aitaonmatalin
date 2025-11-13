@@ -30,6 +30,7 @@ int main(int argc, char** argv)
 	try
 	{
 		using namespace aita;
+		using namespace std::chrono_literals;
 
 		// std::filesystem::current_path() may not be the same as the executable's path
 		const std::filesystem::path gameDir = std::filesystem::path(argv[0]).parent_path();
@@ -51,8 +52,8 @@ int main(int argc, char** argv)
 
 		Keyboard keyboard;
 		keyboard 
-			<< KeyPress(VK_RIGHT, 0, 4250)
-			<< KeyPress(VK_SPACE, 1100, 1150);
+			<< KeyPress(VK_RIGHT, 0ms, 4250ms)
+			<< KeyPress(VK_SPACE, 1100ms, 1150ms);
 
 		keyboard.sendKeys();
 

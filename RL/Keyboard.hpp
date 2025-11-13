@@ -5,7 +5,7 @@ namespace aita
 	class KeyPress
 	{
 	public:
-		KeyPress(uint8_t key, int32_t from, int32_t to);
+		KeyPress(uint8_t key, std::chrono::milliseconds from, std::chrono::milliseconds to);
 		void execute(std::stop_source stop_source, std::chrono::steady_clock::time_point then);
 	private:
 		uint8_t _key;
