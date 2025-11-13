@@ -1,5 +1,27 @@
 #include "../Common/Arguments.hpp"
 #include "Process.hpp"
+#include "Keyboard.hpp"
+
+#ifdef WIN32
+void ensureForegroundWindow(std::wstring_view applicationTitle)
+{
+	HWND window = nullptr;
+
+	while (!window)
+	{
+		puts("Waiting for the game window to appear...");
+		Sleep(250);
+		window = FindWindowW(NULL, L"Aita on matalin");
+	}
+
+	puts("Window found!");
+
+	if (!SetForegroundWindow(window))
+	{
+		puts("Failed to set foreground window.");
+	}
+}
+#endif
 
 int main(int argc, char** argv)
 {
@@ -7,22 +29,33 @@ int main(int argc, char** argv)
 
 	try
 	{
+		using namespace aita;
+
 		// std::filesystem::current_path() may not be the same as the executable's path
 		const std::filesystem::path gameDir = std::filesystem::path(argv[0]).parent_path();
-
-		std::filesystem::path gamePath = gameDir / "aitaonmatalin.exe";
+		const std::filesystem::path gamePath = gameDir / "aitaonmatalin.exe";
 
 		if (!std::filesystem::exists(gamePath))
 		{
 			throw std::runtime_error("Game executable not found: " + gamePath.string());
 		}
 
-		aita::Process process(gamePath, L"--width=640 --height=480 --no-sound --loop");
+		Process process(gamePath, L"--width=640 --height=480 --no-sound --loop");
 
 		process.start();
+
 #ifdef WIN32
+		ensureForegroundWindow(L"Aita on matalin");
 		process.redirect(GetStdHandle(STD_OUTPUT_HANDLE));
 #endif
+
+		Keyboard keyboard;
+		keyboard 
+			<< KeyPress(VK_RIGHT, 0, 4250)
+			<< KeyPress(VK_SPACE, 1100, 1150);
+
+		keyboard.sendKeys();
+
 		process.waitForExit();
 
 	} catch (const std::exception& ex)
