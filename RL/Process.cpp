@@ -87,9 +87,9 @@ namespace aita
 		_outputWriteHandle = INVALID_HANDLE_VALUE;
 	}
 
-	void Process::redirect(void* where)
+	void Process::redirect(std::function<void(std::string_view)> how)
 	{
-		_thread = std::jthread([this, where]()
+		_thread = std::jthread([this, how]()
 		{
 			while (isRunning())
 			{
@@ -100,12 +100,22 @@ namespace aita
 					continue;
 				}
 
-				if (!WriteFile(where, output.data(), static_cast<DWORD>(output.size()), nullptr, nullptr))
-				{
-					throw std::runtime_error("Failed to write to standard output.");
-				}
+				how(output);
 			}
 		});
+	}
+
+	void Process::redirectTo(void* where)
+	{
+		const auto how = [where](std::string_view output)
+		{
+			if (!WriteFile(where, output.data(), static_cast<DWORD>(output.size()), nullptr, nullptr))
+			{
+				throw std::runtime_error("Failed to write to standard output.");
+			}
+		};
+
+		return redirect(how);
 	}
 
 	std::string Process::read()

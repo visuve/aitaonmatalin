@@ -47,7 +47,7 @@ int main(int argc, char** argv)
 
 #ifdef WIN32
 		ensureForegroundWindow(L"Aita on matalin");
-		process.redirect(GetStdHandle(STD_OUTPUT_HANDLE));
+		process.redirectTo(GetStdHandle(STD_OUTPUT_HANDLE));
 #endif
 
 		Keyboard keyboard;

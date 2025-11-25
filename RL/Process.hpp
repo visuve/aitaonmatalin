@@ -9,7 +9,8 @@ namespace aita
 		~Process();
 
 		void start();
-		void redirect(void* where);
+		void redirect(std::function<void(std::string_view)> how);
+		void redirectTo(void* where);
 		std::string read();
 		bool isRunning() const;
 		void terminate(int) const;
