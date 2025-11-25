@@ -6,6 +6,7 @@ namespace aita
 	{
 	public:
 		inline Arguments(int argc, char** argv) :
+			_parentPath(std::filesystem::path(argv[0]).parent_path()),
 			_arguments(argv + 1, argv + argc)
 		{
 		}
@@ -53,9 +54,14 @@ namespace aita
 			static_assert("Unsupported type");
 		}
 
-		bool contains(const std::string_view flag) const
+		inline bool contains(const std::string_view flag) const
 		{
 			return find(flag) != "not found";
+		}
+
+		inline std::filesystem::path parentPath() const
+		{
+			return _parentPath;
 		}
 
 	private:
@@ -81,6 +87,7 @@ namespace aita
 			return "not found";
 		}
 
+		std::filesystem::path _parentPath;
 		std::vector<std::string> _arguments;
 	};
 }

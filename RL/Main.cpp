@@ -32,9 +32,9 @@ int main(int argc, char** argv)
 		using namespace aita;
 		using namespace std::chrono_literals;
 
-		// std::filesystem::current_path() may not be the same as the executable's path
-		const std::filesystem::path gameDir = std::filesystem::path(argv[0]).parent_path();
-		const std::filesystem::path gamePath = gameDir / "aitaonmatalin.exe";
+		Arguments arguments(argc, argv);
+
+		const std::filesystem::path gamePath = arguments.parentPath() / "aitaonmatalin.exe";
 
 		if (!std::filesystem::exists(gamePath))
 		{
@@ -49,7 +49,6 @@ int main(int argc, char** argv)
 		ensureForegroundWindow(L"Aita on matalin");
 		process.redirectTo(GetStdHandle(STD_OUTPUT_HANDLE));
 #endif
-
 		Keyboard keyboard;
 		keyboard 
 			<< KeyPress(VK_RIGHT, 0ms, 4250ms)
