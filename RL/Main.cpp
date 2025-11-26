@@ -26,10 +26,18 @@ namespace aita
 #endif
 	struct GameState
 	{
-		float posX = 0.0f;
-		float posY = 0.0f;
-		float velX = 0.0f;
-		float velY = 0.0f;
+		float posX;
+		float posY;
+		float velX;
+		float velY;
+
+		void reset()
+		{
+			posX = 0.0f;
+			posY = 520.0f; // With screen resolution 640x480 this is the start value
+			velX = 0.0f;
+			velY = 0.0f;
+		}
 
 		operator torch::Tensor() const
 		{
@@ -53,7 +61,13 @@ namespace aita
 	void parseGameState(std::string_view processOutput)
 	{
 		std::lock_guard<std::mutex> lock(Mutex);
-		
+
+		if (processOutput.starts_with("won") || processOutput.starts_with("lost"))
+		{
+			State.reset();
+			return;
+		}
+
 		thread_local std::stringstream ss;
 		ss << processOutput;
 		ss >> State;
@@ -87,6 +101,7 @@ int main(int argc, char** argv)
 #ifdef WIN32
 		ensureForegroundWindow(L"Aita on matalin");
 		process.redirect(parseGameState);
+		State.reset();
 #endif
 		Keyboard keyboard;
 		keyboard 
