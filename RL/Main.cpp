@@ -2,26 +2,65 @@
 #include "Process.hpp"
 #include "Keyboard.hpp"
 
-#ifdef WIN32
-void ensureForegroundWindow(std::wstring_view applicationTitle)
+namespace aita
 {
-	HWND window = nullptr;
-
-	while (!window)
+#ifdef WIN32
+	void ensureForegroundWindow(std::wstring_view applicationTitle)
 	{
-		puts("Waiting for the game window to appear...");
-		Sleep(250);
-		window = FindWindowW(NULL, L"Aita on matalin");
+		HWND window = nullptr;
+
+		while (!window)
+		{
+			puts("Waiting for the game window to appear...");
+			Sleep(250);
+			window = FindWindowW(NULL, L"Aita on matalin");
+		}
+
+		puts("Window found!");
+
+		if (!SetForegroundWindow(window))
+		{
+			puts("Failed to set foreground window.");
+		}
+	}
+#endif
+	struct GameState
+	{
+		float posX = 0.0f;
+		float posY = 0.0f;
+		float velX = 0.0f;
+		float velY = 0.0f;
+
+		operator torch::Tensor() const
+		{
+			return torch::tensor({ { posX, posY, velX, velY } }, torch::kFloat32);
+		}
+	};
+
+	std::istream& operator >> (std::istream& input, GameState& gs)
+	{
+		return input >> gs.posX >> gs.posY >> gs.velX >> gs.velY;
 	}
 
-	puts("Window found!");
-
-	if (!SetForegroundWindow(window))
+	std::ostream& operator << (std::ostream& output, GameState& gs)
 	{
-		puts("Failed to set foreground window.");
+		return output << gs.posX << ' ' << gs.posY << ' ' << gs.velX << ' ' << gs.velY;
+	}
+
+	std::mutex Mutex;
+	GameState State;
+
+	void parseGameState(std::string_view processOutput)
+	{
+		std::lock_guard<std::mutex> lock(Mutex);
+		
+		thread_local std::stringstream ss;
+		ss << processOutput;
+		ss >> State;
+		ss.clear();
+		std::cout << State << std::endl;
 	}
 }
-#endif
 
 int main(int argc, char** argv)
 {
@@ -47,7 +86,7 @@ int main(int argc, char** argv)
 
 #ifdef WIN32
 		ensureForegroundWindow(L"Aita on matalin");
-		process.redirectTo(GetStdHandle(STD_OUTPUT_HANDLE));
+		process.redirect(parseGameState);
 #endif
 		Keyboard keyboard;
 		keyboard 
