@@ -1,45 +1,86 @@
 #pragma once
 
-#include <algorithm>
-#include <random>
-#include <stdexcept>
-
-template<typename T, size_t N>
-class RingBuffer
+namespace aita
 {
-public:
-	void push(const T& value)
+	template<typename T>
+	class RingBuffer
 	{
-		_data[_index] = value;
-		_index = (_index + 1) % N;
-		_count += (_count < N);
-	}
+	public:
+		RingBuffer() = delete;
 
-	T* sample(size_t sampleSize) const
-	{
-		if (sampleSize > _count)
+		explicit RingBuffer(size_t size) :
+			_size(size)
 		{
-			throw std::runtime_error("Not enough elements pushed");
+			if (!_size)
+			{
+				throw std::runtime_error("RingBuffer size must be greater than zero");
+			}
+
+			_data.resize(_size);
 		}
 
-		T* result = new T[sampleSize];
-		
-		thread_local std::random_device device;
-		thread_local std::mt19937 engine(device);
+		void push(const T& value)
+		{
+			_data[_index] = value;
+			advance();
+		}
 
-		std::sample(
-			_data,
-			_data + _count,
-			result,
-			sampleSize,
-			engine
-		);
+		void push(T&& value)
+		{
+			_data[_index] = std::move(value);
+			advance();
+		}
 
-		return result;
-	}
+		template<typename... Args>
+		void emplace(Args&&... args)
+		{
+			_data[_index] = T(std::forward<Args>(args)...);
+			advance();
+		}
 
-private:
-	size_t _index = 0;
-	size_t _count = 0;
-	T _data[N];
-};
+		void randomSample(std::span<T> samples) const
+		{
+			if (samples.empty())
+			{
+				throw std::runtime_error("Resize the sample buffer accordingly");
+			}
+
+			if (samples.size() > _count)
+			{
+				throw std::runtime_error("Not enough elements pushed");
+			}
+
+			thread_local std::random_device device;
+			thread_local std::mt19937 engine(device());
+
+			std::sample(
+				_data.begin(),
+				_data.begin() + static_cast<std::ptrdiff_t>(_count),
+				samples.begin(),
+				samples.size(),
+				engine);
+		}
+
+		inline size_t count() const
+		{
+			return _count;
+		}
+
+		inline size_t size() const
+		{
+			return _size;
+		}
+
+	private:
+		inline void advance()
+		{
+			_index = (_index + 1) % _size;
+			_count += (_count < _size);
+		}
+
+		const size_t _size = 0;
+		size_t _index = 0;
+		size_t _count = 0;
+		std::vector<T> _data;
+	};
+}
