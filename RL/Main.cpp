@@ -1,6 +1,8 @@
 #include "../Common/Arguments.hpp"
 #include "Process.hpp"
 #include "Keyboard.hpp"
+#include "RL.hpp"
+#include "AitaEnv.hpp"
 
 namespace aita
 {
@@ -24,39 +26,14 @@ namespace aita
 		}
 	}
 #endif
-	struct GameState
-	{
-		float posX;
-		float posY;
-		float velX;
-		float velY;
-
-		void reset()
-		{
-			posX = 0.0f;
-			posY = 520.0f; // With screen resolution 640x480 this is the start value
-			velX = 0.0f;
-			velY = 0.0f;
-		}
-
-		operator torch::Tensor() const
-		{
-			return torch::tensor({ { posX, posY, velX, velY } }, torch::kFloat32);
-		}
-	};
-
-	std::istream& operator >> (std::istream& input, GameState& gs)
-	{
-		return input >> gs.posX >> gs.posY >> gs.velX >> gs.velY;
-	}
-
-	std::ostream& operator << (std::ostream& output, GameState& gs)
-	{
-		return output << gs.posX << ' ' << gs.posY << ' ' << gs.velX << ' ' << gs.velY;
-	}
 
 	std::mutex Mutex;
-	GameState State;
+	GameState GlobalState;
+
+	torch::Tensor toTensor(const GameState& state)
+	{
+		return torch::tensor({ state.posX, state.posY, state.velX, state.velY });
+	}
 
 	void parseGameState(std::string_view processOutput)
 	{
@@ -64,15 +41,31 @@ namespace aita
 
 		if (processOutput.starts_with("won") || processOutput.starts_with("lost"))
 		{
-			State.reset();
+			// TODO: implement
+			GlobalState.reset();
 			return;
 		}
 
-		thread_local std::stringstream ss;
-		ss << processOutput;
-		ss >> State;
-		ss.clear();
-		std::cout << State << std::endl;
+		thread_local GameState localState;
+		localState.parse(processOutput);
+
+ 		if (localState == GlobalState)
+		{
+			return;
+		}
+
+		GlobalState = localState;
+
+		std::cout << GlobalState << std::endl;
+	}
+
+	void run(uint64_t attempts)
+	{
+		constexpr int64_t states = 4; // See GameState
+		constexpr int64_t actions = 3; // left, up, right
+		DQN network(states, actions);
+		
+		// TODO: implement training and execution loop
 	}
 }
 
@@ -101,14 +94,21 @@ int main(int argc, char** argv)
 #ifdef WIN32
 		ensureForegroundWindow(L"Aita on matalin");
 		process.redirect(parseGameState);
-		State.reset();
+		GlobalState.reset();
 #endif
-		Keyboard keyboard;
-		keyboard 
-			<< KeyPress(VK_RIGHT, 0ms, 4250ms)
-			<< KeyPress(VK_SPACE, 1100ms, 1150ms);
+		if (arguments.contains("--example"))
+		{
+			Keyboard keyboard;
+			keyboard
+				<< KeyPress(VK_RIGHT, 0ms, 4250ms)
+				<< KeyPress(VK_SPACE, 1100ms, 1150ms);
 
-		keyboard.sendKeys();
+			keyboard.sendKeys();
+		}
+		else
+		{
+			run(5);
+		}
 
 		process.waitForExit();
 
