@@ -50,9 +50,23 @@ namespace aita
 			iter = ptr;
 		}
 	}
+
+	void HyperParameters::parse(const Arguments& arguments)
+	{
+		timeout = arguments.get<std::chrono::seconds>("--timeout", DefaultTimeout);
+		replayBufferSize = arguments.get<uint32_t>("--replay_buffer_size", DefaultReplayBufferSize);
+	}
 }
 
-std::ostream& operator<<(std::ostream& output, aita::GameState& gs)
+std::ostream& operator<<(std::ostream& output, const aita::GameState& gs)
 {
 	return output << gs.posX << ' ' << gs.posY << ' ' << gs.velX << ' ' << gs.velY;
+}
+
+std::ostream& operator<<(std::ostream& output, const aita::HyperParameters& hp)
+{
+	output << "Hyper Parameters:\n";
+	output << "Timeout: " << hp.timeout.count() << " seconds\n";
+	output << "Replay buffer size: " << hp.replayBufferSize << '\n';
+	return output;
 }

@@ -1,6 +1,7 @@
 #include <torch/torch.h>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <mutex>

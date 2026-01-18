@@ -51,6 +51,11 @@ namespace aita
 				return std::stod(value);
 			}
 
+			if constexpr (std::is_same_v<T, std::chrono::seconds>)
+			{
+				return std::chrono::seconds(std::stoll(value));
+			}
+
 			static_assert("Unsupported type");
 		}
 

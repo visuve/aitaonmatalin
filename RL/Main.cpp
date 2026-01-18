@@ -1,8 +1,7 @@
-#include "../Common/Arguments.hpp"
-#include "Process.hpp"
-#include "Keyboard.hpp"
-#include "RL.hpp"
 #include "AitaEnv.hpp"
+#include "Keyboard.hpp"
+#include "Process.hpp"
+#include "RL.hpp"
 
 namespace aita
 {
@@ -59,11 +58,9 @@ namespace aita
 		std::cout << GlobalState << std::endl;
 	}
 
-	void run(uint64_t attempts)
+	void run(HyperParameters& hp)
 	{
-		constexpr int64_t states = 4; // See GameState
-		constexpr int64_t actions = 3; // left, up, right
-		DQN network(states, actions);
+		DQN network(DQNStates, DQNActions);
 		
 		// TODO: implement training and execution loop
 	}
@@ -107,7 +104,9 @@ int main(int argc, char** argv)
 		}
 		else
 		{
-			run(5);
+			HyperParameters hp;
+			hp.parse(arguments);
+			run(hp);
 		}
 
 		process.waitForExit();
