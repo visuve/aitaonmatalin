@@ -2,21 +2,21 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
 	# LibTorch completely explodes if the debug/release builds are mixed
 	if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
 		FetchContent_Declare(Torch
-			URL https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.9.0%2Bcpu.zip
-			URL_HASH MD5=53b911e3eb52675e9ec520e93717912b)
+			URL https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.9.1%2Bcpu.zip
+			URL_HASH MD5=4fffc238c66565a8e8836def850c06d5)
 	else()
 		FetchContent_Declare(Torch
-			URL https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-2.9.0%2Bcpu.zip
-			URL_HASH MD5=c23cd459272379c425edaf0a0722a438)
+			URL https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-2.9.1%2Bcpu.zip
+			URL_HASH MD5=3b4b6b5f6bf986693d9e6bb1233caf3f)
 	endif()
 elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
 	FetchContent_Declare(Torch
-		URL https://download.pytorch.org/libtorch/cpu/libtorch-macos-arm64-2.9.0.zip
-		URL_HASH MD5=175ba2e5a0eeab9cf2605ed5fcf686b6)
+		URL https://download.pytorch.org/libtorch/cpu/libtorch-macos-arm64-2.9.1.zip
+		URL_HASH MD5=096da935727ffac060b1962da892d6da)
 elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
 	FetchContent_Declare(Torch
-		URL https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-2.9.0%2Bcpu.zip
-		URL_HASH MD5=acb8e24c3fcbe1879195994f0189fb7a)
+		URL https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-2.9.1%2Bcpu.zip
+		URL_HASH MD5=63cbda340ef91c7d6c140986bf2fa136)
 else()
 	message(SEND_ERROR "Unsupported platform" )
 endif()
