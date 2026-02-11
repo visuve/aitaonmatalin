@@ -33,6 +33,7 @@ namespace aita
 		_startupInfo.cb = sizeof(STARTUPINFOW);
 		_startupInfo.hStdError = _outputWriteHandle;
 		_startupInfo.hStdOutput = _outputWriteHandle;
+		_startupInfo.hStdInput = nullptr;
 		_startupInfo.dwFlags |= STARTF_USESTDHANDLES;
 
 		ZeroMemory(&_processInformation, sizeof(PROCESS_INFORMATION));
@@ -91,16 +92,25 @@ namespace aita
 	{
 		_thread = std::jthread([this, how]()
 		{
-			while (isRunning())
+			try
 			{
-				std::string output = read();
-
-				if (output.empty())
+				while (isRunning())
 				{
-					continue;
+					std::string output = read();
+
+					if (output.empty())
+					{
+						continue;
+					}
+
+					how(output);
 				}
 
-				how(output);
+				std::cout << "Process exited with code: " << exitCode() << std::endl;
+			}
+			catch (const std::exception& ex)
+			{
+				std::cerr << "Error in process output redirection: " << ex.what() << std::endl;
 			}
 		});
 	}
