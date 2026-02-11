@@ -8,6 +8,7 @@ namespace aita::snd
 	constexpr float HighNote = 5000.0f;
 	constexpr float NoteStep = 1.5f;
 	constexpr uint32_t NoteDuration = 60;
+	constexpr uint32_t SleepDuration = 250;
 
 	void lose()
 	{
@@ -21,7 +22,7 @@ namespace aita::snd
 		{
 			_beep(static_cast<uint32_t>(note), NoteDuration);
 		}
-		_sleep(500);
+		_sleep(SleepDuration);
 #endif
 	}
 
@@ -37,7 +38,7 @@ namespace aita::snd
 		{
 			_beep(static_cast<uint32_t>(note), NoteDuration);
 		}
-		_sleep(500);
+		_sleep(SleepDuration);
 #endif
 	}
 }
@@ -67,7 +68,7 @@ int main(int argc, char** argv)
 	if (arguments.contains("--no-gravity"))
 	{
 		game.Config.Gravity = 0.0f;
-		puts("Gravity disabled");
+		std::println("Gravity disabled");
 	}
 	
 	std::cout << std::setprecision(2) << std::fixed;
@@ -78,14 +79,16 @@ int main(int argc, char** argv)
 		
 		if (score)
 		{
-			puts("won");
+			std::println("won");
 			aita::snd::win();
 		}
 		else
 		{
-			puts("lost");
+			std::println("lost");
 			aita::snd::lose();
 		}
+
+		std::cout.flush();
 
 	} while (game && arguments.contains("--loop"));
 
