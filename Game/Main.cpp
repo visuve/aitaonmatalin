@@ -8,38 +8,28 @@ namespace aita::snd
 	constexpr float HighNote = 5000.0f;
 	constexpr float NoteStep = 1.5f;
 	constexpr uint32_t NoteDuration = 60;
-	constexpr uint32_t SleepDuration = 250;
+	constexpr std::chrono::milliseconds SleepDuration(100);
 
 	void lose()
 	{
-		if (NoSound)
-		{
-			return;
-		}
-
 #ifdef WIN32
-		for (float note = HighNote; note >= LowNote; note /= NoteStep)
+		for (float note = HighNote; !NoSound && note >= LowNote; note /= NoteStep)
 		{
 			_beep(static_cast<uint32_t>(note), NoteDuration);
 		}
-		_sleep(SleepDuration);
 #endif
+		std::this_thread::sleep_for(SleepDuration);
 	}
 
 	void win()
 	{
-		if (NoSound)
-		{
-			return;
-		}
-
 #ifdef WIN32
-		for (float note = LowNote; note <= HighNote; note *= NoteStep)
+		for (float note = LowNote; !NoSound && note <= HighNote; note *= NoteStep)
 		{
 			_beep(static_cast<uint32_t>(note), NoteDuration);
 		}
-		_sleep(SleepDuration);
 #endif
+		std::this_thread::sleep_for(SleepDuration);
 	}
 }
 
