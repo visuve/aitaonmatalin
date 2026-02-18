@@ -2,20 +2,26 @@
 
 namespace aita
 {
-	constexpr float StartingPosX = 0.0f;
-	constexpr float StartingPosY = 520.0f; // With screen resolution 640x480 this is the start value
-
 	constexpr bool nearEqual(float a, float b, float epsilon = 0.01f)
 	{
 		return (a > b ? a - b : b - a) <= epsilon;
 	}
 
+	GameState::GameState()
+	{
+		reset();
+	}
+
 	void GameState::reset()
 	{
+		start = std::chrono::steady_clock::now();
 		posX = StartingPosX;
 		posY = StartingPosY;
 		velX = 0.0f;
 		velY = 0.0f;
+		time = std::chrono::milliseconds(0);
+		score = MaxScore;
+		result = Result::None;
 	}
 
 	bool GameState::operator == (const GameState& other) const
@@ -26,10 +32,36 @@ namespace aita
 			nearEqual(velY, other.velY);
 	}
 
+	constexpr std::string_view WonMarker = "won\r\n";
+	constexpr std::string_view LostMarker = "lost\r\n";
+
 	void GameState::parse(std::string_view line)
 	{
-		std::array<float*, 4> targets = { &posX, &posY, &velX, &velY };
+		//std::cout << "Parsing line: " << line << std::endl;
+
+		if (line.empty())
+		{
+			std::cerr << "Received empty line, skipping" << std::endl;
+			return;
+		}
 		
+		if (line.starts_with(LostMarker))
+		{
+			result = Result::Lost;
+			line.remove_prefix(LostMarker.size());
+			return parse(line);
+		}
+
+		if (line.starts_with(WonMarker))
+		{
+			result = Result::Won;
+			line.remove_prefix(WonMarker.size());
+			return parse(line);
+		}
+
+		calculateScore();
+		
+		const std::array<float*, 4> targets = { &posX, &posY, &velX, &velY };
 		const char* iter = line.data();
 		const char* const end = line.data() + line.size();
 
@@ -51,6 +83,35 @@ namespace aita
 		}
 	}
 
+	void GameState::calculateScore()
+	{
+		const auto diff = std::chrono::steady_clock::now() - start;
+		time = std::chrono::duration_cast<std::chrono::milliseconds>(diff);
+		
+		const float base = std::clamp(MaxScore - time.count(), MinScore, MaxScore);
+		const float progess = std::clamp(posX / WindowWidth, 0.0f, 1.0f) * ProgressReinforcementScore;
+		float total = base + progess;
+
+		if (result == Result::Won)
+		{
+			total *= WinFactor;
+		}
+		else if (result == Result::Lost)
+		{
+			total *= LossFactor;
+		}
+
+		score = std::clamp(total, MinScore, MaxScore);
+		
+		if (result != Result::None && GameOverCallback)
+		{
+			GameOverCallback(*this);
+			reset();
+		}
+	}
+
+	std::function<void(const GameState&)> GameState::GameOverCallback = nullptr;
+
 	void HyperParameters::parse(const Arguments& arguments)
 	{
 		timeout = arguments.get<std::chrono::seconds>("--timeout", DefaultTimeout);
@@ -58,12 +119,12 @@ namespace aita
 	}
 }
 
-std::ostream& operator<<(std::ostream& output, const aita::GameState& gs)
+std::ostream& operator << (std::ostream& output, const aita::GameState& gs)
 {
-	return output << gs.posX << ' ' << gs.posY << ' ' << gs.velX << ' ' << gs.velY;
+	return output << gs.posX << ' ' << gs.posY << ' ' << gs.velX << ' ' << gs.velY << ' ' << gs.score;
 }
 
-std::ostream& operator<<(std::ostream& output, const aita::HyperParameters& hp)
+std::ostream& operator << (std::ostream& output, const aita::HyperParameters& hp)
 {
 	output << "Hyper Parameters:\n";
 	output << "Timeout: " << hp.timeout.count() << " seconds\n";

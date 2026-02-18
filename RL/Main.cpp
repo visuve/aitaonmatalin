@@ -12,21 +12,23 @@ namespace aita
 
 		while (!window)
 		{
-			puts("Waiting for the game window to appear...");
+			std::println("Waiting for the game window to appear...");
 			Sleep(250);
 			window = FindWindowW(NULL, L"Aita on matalin");
 		}
 
-		puts("Window found!");
+		std::println("Window found!");
 
 		if (!SetForegroundWindow(window))
 		{
-			puts("Failed to set foreground window.");
+			std::println("Failed to set foreground window.");
 		}
 	}
 #endif
 
 	std::mutex Mutex;
+	std::condition_variable Condition;
+	bool newData = false;
 	GameState GlobalState;
 
 	torch::Tensor toTensor(const GameState& state)
@@ -38,15 +40,18 @@ namespace aita
 	{
 		std::lock_guard<std::mutex> lock(Mutex);
 
-		if (processOutput.starts_with("won") || processOutput.starts_with("lost"))
+		thread_local GameState localState;
+
+		try
 		{
-			// TODO: implement
-			GlobalState.reset();
+			localState.parse(processOutput);
+		}
+		catch (const std::exception& e)
+		{
+			std::cout << "Failed to parse game state from process output: " << processOutput << std::endl;
+			std::cout << "Exception: " << e.what() << std::endl;
 			return;
 		}
-
-		thread_local GameState localState;
-		localState.parse(processOutput);
 
  		if (localState == GlobalState)
 		{
@@ -54,16 +59,44 @@ namespace aita
 		}
 
 		GlobalState = localState;
-
-		std::cout << GlobalState << std::endl;
+		newData = true;
+		Condition.notify_one();
 	}
 
 	void run(HyperParameters& hp)
 	{
+		GameState::GameOverCallback = [](const GameState& state)
+		{
+			std::cout << "Game over! Final score: " << state.score
+				<< " Time: " << float(state.time.count() / 1000.0f)
+				<< " Result: " << (state.result == Result::Won ? "Won" : "Lost") << std::endl;
+		};
+
 		DQN network(DQNStates, DQNActions);
 		
-		// TODO: implement training and execution loop
+		const auto timeoutPoint = std::chrono::steady_clock::now() + hp.timeout;
+
+		while (std::chrono::steady_clock::now() < timeoutPoint)
+		{
+			std::unique_lock<std::mutex> lock(Mutex);
+			Condition.wait(lock, []() { return newData; });
+			std::cout << GlobalState << std::endl;
+			newData = false;
+		}
+
 	}
+}
+
+BOOL WINAPI MyHandler(DWORD dwCtrlType) 
+{
+	if (dwCtrlType == CTRL_CLOSE_EVENT) 
+	{
+		// Return TRUE to signal that we've handled the event.
+		// This stops the OS from calling the next handler (Intel's crash handler).
+		return TRUE;
+	}
+
+	return FALSE;
 }
 
 int main(int argc, char** argv)
@@ -72,6 +105,8 @@ int main(int argc, char** argv)
 
 	try
 	{
+		SetConsoleCtrlHandler(MyHandler, TRUE);
+
 		using namespace aita;
 		using namespace std::chrono_literals;
 
@@ -84,7 +119,7 @@ int main(int argc, char** argv)
 			throw std::runtime_error("Game executable not found: " + gamePath.string());
 		}
 
-		Process process(gamePath, L"--width=640 --height=480 --no-sound --loop");
+		Process process(gamePath, std::format(L"--width={} --height={} --no-sound --loop", WindowWidth, WindowHeight));
 
 		process.start();
 
@@ -106,12 +141,13 @@ int main(int argc, char** argv)
 		{
 			HyperParameters hp;
 			hp.parse(arguments);
-			run(hp);
+		 	run(hp); // TODO: if the process dies, the program should exit
 		}
 
 		process.waitForExit();
 
-	} catch (const std::exception& ex)
+	} 
+	catch (const std::exception& ex)
 	{
 		std::cerr << "An exception occurred: " << ex.what() << std::endl;
 
