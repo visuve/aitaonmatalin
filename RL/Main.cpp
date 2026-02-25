@@ -75,6 +75,7 @@ namespace aita
 		};
 
 		DQN network(DQNStates, DQNActions);
+		RingBuffer<Transition> replayBuffer(hp.replayBufferSize);
 		
 		const auto start = std::chrono::steady_clock::now();
 		const auto maximumExecTime = start + hp.timeout;
@@ -83,16 +84,63 @@ namespace aita
 			return std::chrono::steady_clock::now() < maximumExecTime;
 		};
 
+		float currentEpsilon = hp.epsilonStart;
+		GameState currentState;
+		GameState nextState;
+
 		while (KeepRunning && timeLeft())
 		{
-			if (!Semaphore.try_acquire_for(DefaultEpisodeDuration + 1s))
+			if (!Semaphore.try_acquire_for(DefaultEpisodeTimeout))
 			{
-				std::cerr << "Failed to acquire semaphore within timeout." << std::endl;
+				std::cerr << "Failed to acquire semaphore for current state." << std::endl;
 				continue;
 			}
 
-			std::lock_guard<std::mutex> lock(Mutex);
-			std::cout << GlobalState << std::endl;
+			{
+				std::lock_guard<std::mutex> lock(Mutex);
+				currentState = GlobalState;
+			}
+
+			torch::Tensor stateTensor = toTensor(GlobalState);
+			auto [qValues, timings] = network.forward(stateTensor);
+			int64_t actionIndex = 0;
+
+			if (random(FloatDist) < currentEpsilon)
+			{
+				actionIndex = random(ActionDist);
+			}
+			else
+			{
+				actionIndex = qValues.argmax().item<int64_t>();
+			}
+
+			currentEpsilon = std::max(hp.epsilonMin, currentEpsilon * hp.epsilonDecay);
+
+			// TODO: Execute action via Keyboard using actionIndex and timings
+
+			if (!Semaphore.try_acquire_for(DefaultEpisodeTimeout))
+			{
+				std::cerr << "Failed to acquire semaphore for next state." << std::endl;
+				continue;
+			}
+
+			{
+				std::lock_guard<std::mutex> lock(Mutex);
+				nextState = GlobalState;
+			}
+
+			float reward = nextState.score - currentState.score;
+			bool done = (nextState.result != Result::None);
+
+			replayBuffer.emplace(
+				stateTensor,
+				actionIndex,
+				reward,
+				toTensor(nextState),
+				done
+			);
+
+			// TODO: Sample from replayBuffer and optimize network
 		}
 	}
 
