@@ -116,6 +116,9 @@ namespace aita
 	{
 		timeout = arguments.get<std::chrono::seconds>("--timeout", DefaultTimeout);
 		replayBufferSize = arguments.get<uint32_t>("--replay_buffer_size", DefaultReplayBufferSize);
+		epsilonStart = arguments.get<float>("--epsilon_start", DefaultEpsilonStart);
+		epsilonMin = arguments.get<float>("--epsilon_min", DefaultEpsilonMin);
+		epsilonDecay = arguments.get<float>("--epsilon_decay", DefaultEpsilonDecay);
 	}
 }
 
@@ -126,8 +129,11 @@ std::ostream& operator << (std::ostream& output, const aita::GameState& gs)
 
 std::ostream& operator << (std::ostream& output, const aita::HyperParameters& hp)
 {
-	output << "Hyper Parameters:\n";
+	output << "Hyper parameters:\n";
 	output << "Timeout: " << hp.timeout.count() << " seconds\n";
 	output << "Replay buffer size: " << hp.replayBufferSize << '\n';
+	output << "Epsilon start: " << hp.epsilonStart << '\n';
+	output << "Epsilon min: " << hp.epsilonMin << '\n';
+	output << "Epsilon decay: " << hp.epsilonDecay << '\n';
 	return output;
 }

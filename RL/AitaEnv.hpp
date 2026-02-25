@@ -21,6 +21,7 @@ namespace aita
 	};
 
 	constexpr std::chrono::seconds DefaultEpisodeDuration = 10s;
+	constexpr std::chrono::seconds DefaultEpisodeTimeout = DefaultEpisodeDuration + 1s;
 	constexpr int32_t WindowWidth = 640;
 	constexpr int32_t WindowHeight = 480;
 	constexpr float StartingPosX = 0.0f;
@@ -59,12 +60,21 @@ namespace aita
 
 	constexpr std::chrono::seconds DefaultTimeout = std::chrono::hours(1);
 	constexpr uint32_t DefaultReplayBufferSize = 100000;
+	constexpr float DefaultEpsilonStart = 1.0f;
+	constexpr float DefaultEpsilonMin = 0.05f;
+	constexpr float DefaultEpsilonDecay = 0.999f;
+
+	std::uniform_real_distribution<float> FloatDist(0.0f, 1.0f);
+	std::uniform_int_distribution<int64_t> ActionDist(0, DQNActions - 1);
 
 	class HyperParameters
 	{
 	public:
 		std::chrono::seconds timeout = DefaultTimeout;      // Maximum execution time
 		uint32_t replayBufferSize = DefaultReplayBufferSize; // Maximum number of transitions to store in memory (not bytes)
+		float epsilonStart = DefaultEpsilonStart;
+		float epsilonMin = DefaultEpsilonMin;
+		float epsilonDecay = DefaultEpsilonDecay;
 
 		void parse(const Arguments&);
 	};
