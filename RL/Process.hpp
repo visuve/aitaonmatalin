@@ -17,6 +17,11 @@ namespace aita
 		int exitCode() const;
 		bool waitForExit(uint32_t milliseconds = 0xFFFFFFFF) const;
 
+		inline operator bool() const
+		{
+			return isRunning();
+		}
+
 	private:
 		const std::filesystem::path _path;
 		std::wstring _arguments;

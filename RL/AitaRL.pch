@@ -8,6 +8,7 @@
 #include <print>
 #include <random>
 #include <ranges>
+#include <semaphore>
 #include <span>
 #include <sstream>
 #include <stdexcept>

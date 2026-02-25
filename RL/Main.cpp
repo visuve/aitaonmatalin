@@ -27,8 +27,8 @@ namespace aita
 #endif
 
 	std::mutex Mutex;
-	std::condition_variable Condition;
-	bool newData = false;
+	std::binary_semaphore Semaphore(0);
+	std::atomic<bool> KeepRunning = true;
 	GameState GlobalState;
 
 	torch::Tensor toTensor(const GameState& state)
@@ -38,8 +38,6 @@ namespace aita
 
 	void parseGameState(std::string_view processOutput)
 	{
-		std::lock_guard<std::mutex> lock(Mutex);
-
 		thread_local GameState localState;
 
 		try
@@ -53,17 +51,21 @@ namespace aita
 			return;
 		}
 
- 		if (localState == GlobalState)
 		{
-			return;
+			std::lock_guard<std::mutex> lock(Mutex);
+
+			if (localState == GlobalState)
+			{
+				return;
+			}
+
+			GlobalState = localState;
 		}
 
-		GlobalState = localState;
-		newData = true;
-		Condition.notify_one();
+		Semaphore.release();
 	}
 
-	void run(HyperParameters& hp)
+	void run(Process& process, HyperParameters& hp)
 	{
 		GameState::GameOverCallback = [](const GameState& state)
 		{
@@ -74,39 +76,51 @@ namespace aita
 
 		DQN network(DQNStates, DQNActions);
 		
-		const auto timeoutPoint = std::chrono::steady_clock::now() + hp.timeout;
-
-		while (std::chrono::steady_clock::now() < timeoutPoint)
+		const auto start = std::chrono::steady_clock::now();
+		const auto maximumExecTime = start + hp.timeout;
+		const auto timeLeft = [&maximumExecTime]()->bool
 		{
-			std::unique_lock<std::mutex> lock(Mutex);
-			Condition.wait(lock, []() { return newData; });
+			return std::chrono::steady_clock::now() < maximumExecTime;
+		};
+
+		while (KeepRunning && timeLeft())
+		{
+			if (!Semaphore.try_acquire_for(DefaultEpisodeDuration + 1s))
+			{
+				std::cerr << "Failed to acquire semaphore within timeout." << std::endl;
+				continue;
+			}
+
+			std::lock_guard<std::mutex> lock(Mutex);
 			std::cout << GlobalState << std::endl;
-			newData = false;
+		}
+	}
+
+	BOOL WINAPI consoleHandler(DWORD ctrlType)
+	{
+		if (ctrlType == CTRL_CLOSE_EVENT)
+		{
+			// Return TRUE to signal that we've handled the event.
+			// This stops the OS from calling the next handler (Intel's crash handler).
+			// which ironically causes crash on exit (in my use case)
+			KeepRunning = false;
+			return TRUE;
 		}
 
+		return FALSE;
 	}
-}
-
-BOOL WINAPI MyHandler(DWORD dwCtrlType) 
-{
-	if (dwCtrlType == CTRL_CLOSE_EVENT) 
-	{
-		// Return TRUE to signal that we've handled the event.
-		// This stops the OS from calling the next handler (Intel's crash handler).
-		return TRUE;
-	}
-
-	return FALSE;
 }
 
 int main(int argc, char** argv)
 {
+#ifdef WIN32
+	SetConsoleCtrlHandler(aita::consoleHandler, TRUE);
+#endif
+
 	puts("aitaRL");
 
 	try
 	{
-		SetConsoleCtrlHandler(MyHandler, TRUE);
-
 		using namespace aita;
 		using namespace std::chrono_literals;
 
@@ -141,7 +155,7 @@ int main(int argc, char** argv)
 		{
 			HyperParameters hp;
 			hp.parse(arguments);
-		 	run(hp); // TODO: if the process dies, the program should exit
+		 	run(process, hp);
 		}
 
 		process.waitForExit();

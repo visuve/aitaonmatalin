@@ -20,11 +20,12 @@ namespace aita
 		Won
 	};
 
+	constexpr std::chrono::seconds DefaultEpisodeDuration = 10s;
 	constexpr int32_t WindowWidth = 640;
 	constexpr int32_t WindowHeight = 480;
 	constexpr float StartingPosX = 0.0f;
 	constexpr float StartingPosY = 520.0f; // With screen resolution 640x480 this is the start value
-	constexpr float MaxScore = std::chrono::milliseconds(10s).count();
+	constexpr float MaxScore = std::chrono::duration_cast<std::chrono::milliseconds>(DefaultEpisodeDuration).count();
 	constexpr float MinScore = 0.0f;
 	constexpr float ProgressReinforcementScore = 1000.0f;
 	constexpr float WinFactor = 1.25f;
