@@ -17,4 +17,21 @@ namespace aita
 		torch::nn::Linear _layer2 = nullptr; // key codes (discrete)
 		torch::nn::Linear _layer3 = nullptr; // from-to timings (continuous)
 	};
+
+	template <typename T>
+	auto random(T&& distribution)
+	{
+		thread_local std::random_device device;
+		thread_local std::default_random_engine engine(device());
+		return distribution(engine);
+	}
+
+	struct Transition
+	{
+		torch::Tensor state;
+		int64_t action;
+		float reward;
+		torch::Tensor nextState;
+		bool done;
+	};
 }
