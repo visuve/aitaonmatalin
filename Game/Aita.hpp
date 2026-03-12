@@ -7,6 +7,7 @@ namespace aita
 		constexpr static uint32_t FramesPerSecond = 30;
 		constexpr static float DefaultWindowWidth = 800.0f;
 		constexpr static float DefaultWindowHeight = 600.0f;
+		constexpr static int32_t MaxScore = FramesPerSecond * 10;
 
 		const float WindowWidth;
 		const float WindowHeight;

@@ -185,9 +185,10 @@ namespace aita
 
 		// The score is inversely proportional to the time taken to finish the game
 		// Higher score equals less time taken to make the jump
-		int32_t score = Configuration::FramesPerSecond * 10;
+		int32_t score = Configuration::MaxScore;
+		std::cout << _player << std::endl;
 
-		while (_window.isOpen())
+		while (_window.isOpen() && score)
 		{
 			_window.handleEvents(handleClose, handleKeypress);
 
@@ -206,17 +207,15 @@ namespace aita
 				break;
 			}
 
-			if (!--score)
-			{
-				break;
-			}
-
 			if (_player.isMoving())
 			{
 				std::cout << _player << std::endl;
 			}
+
+			--score;
 		}
 
+		std::cout << _player << std::endl;
 		return _window.isOpen() ? score : 0;
 	}
 
