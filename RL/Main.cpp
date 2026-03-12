@@ -53,12 +53,6 @@ namespace aita
 
 		{
 			std::lock_guard<std::mutex> lock(Mutex);
-
-			if (localState == GlobalState)
-			{
-				return;
-			}
-
 			GlobalState = localState;
 		}
 

@@ -41,7 +41,6 @@ namespace aita
 		Result result;
 
 		void reset();
-		bool operator == (const GameState& other) const;
 		void parse(std::string_view line);
 
 		static std::function<void(const GameState&)> GameOverCallback;

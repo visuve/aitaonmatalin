@@ -2,11 +2,6 @@
 
 namespace aita
 {
-	constexpr bool nearEqual(float a, float b, float epsilon = 0.01f)
-	{
-		return (a > b ? a - b : b - a) <= epsilon;
-	}
-
 	GameState::GameState()
 	{
 		reset();
@@ -22,14 +17,6 @@ namespace aita
 		time = std::chrono::milliseconds(0);
 		score = MaxScore;
 		result = Result::None;
-	}
-
-	bool GameState::operator == (const GameState& other) const
-	{
-		return nearEqual(posX, other.posX) &&
-			nearEqual(posY, other.posY) &&
-			nearEqual(velX, other.velX) &&
-			nearEqual(velY, other.velY);
 	}
 
 	constexpr std::string_view WonMarker = "won\r\n";
