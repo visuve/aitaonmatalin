@@ -6,13 +6,6 @@ namespace aita
 {
 	using namespace std::chrono_literals;
 
-	enum class Action : uint8_t
-	{
-		Left = 1,
-		Right = 2,
-		Jump = 3
-	};
-
 	enum class Result : uint8_t
 	{
 		None = 0,
@@ -31,6 +24,8 @@ namespace aita
 	constexpr float ProgressReinforcementScore = 1000.0f;
 	constexpr float WinFactor = 1.25f;
 	constexpr float LossFactor = 0.75f;
+	constexpr std::chrono::milliseconds MinKeyPressDuration = 100ms;
+	constexpr std::chrono::milliseconds MaxKeyPressDuration = DefaultEpisodeDuration;
 
 	class GameState
 	{
@@ -64,8 +59,8 @@ namespace aita
 	constexpr float DefaultEpsilonMin = 0.05f;
 	constexpr float DefaultEpsilonDecay = 0.999f;
 
-	std::uniform_real_distribution<float> FloatDist(0.0f, 1.0f);
-	std::uniform_int_distribution<int64_t> ActionDist(0, DQNActions - 1);
+	inline std::uniform_real_distribution<float> FloatDist(0.0f, 1.0f);
+	inline std::uniform_int_distribution<int64_t> ActionDist(0, DQNActions - 1);
 
 	class HyperParameters
 	{
