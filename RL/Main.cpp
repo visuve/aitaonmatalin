@@ -27,7 +27,8 @@ namespace aita
 #endif
 
 	std::mutex Mutex;
-	std::binary_semaphore Semaphore(0);
+	std::condition_variable Condition;
+	uint64_t Sequence = 0;
 	std::atomic<bool> KeepRunning = true;
 	GameState GlobalState;
 
@@ -38,7 +39,7 @@ namespace aita
 
 	void parseGameState(std::string_view processOutput)
 	{
-		thread_local GameState localState;
+		GameState localState;
 
 		try
 		{
@@ -54,9 +55,70 @@ namespace aita
 		{
 			std::lock_guard<std::mutex> lock(Mutex);
 			GlobalState = localState;
+			++Sequence;
 		}
 
-		Semaphore.release();
+		Condition.notify_all();
+	}
+
+	bool observeState(GameState& state)
+	{
+		std::unique_lock<std::mutex> lock(Mutex);
+
+		const uint64_t currentSequence = Sequence;
+
+		if (!Condition.wait_for(lock, DefaultEpisodeTimeout,
+			[&] { return Sequence != currentSequence && GlobalState.result == Result::None; }))
+		{
+			std::cerr << "Timeout waiting for game state." << std::endl;
+			return false;
+		}
+
+		if (!KeepRunning)
+		{
+			return false;
+		}
+
+		state = GlobalState;
+		return true;
+	}
+
+	int64_t decideAction(float currentEpsilon, const torch::Tensor& qValues)
+	{
+		if (random(FloatDist) < currentEpsilon)
+		{
+			return random(ActionDist);
+		}
+		
+		return qValues.argmax().item<int64_t>();
+	}
+
+	GameState executeActionAndWait(int64_t actionIndex, const torch::Tensor& timings)
+	{
+		const int64_t delayIndex = actionIndex * 2;
+		const int64_t durationIndex = delayIndex + 1;
+
+		const float delayFloat = timings[delayIndex].item<float>();
+		const float durationFloat = timings[durationIndex].item<float>();
+		const float scaledDuration = MinKeyPressDuration.count() +
+			(durationFloat * (MaxKeyPressDuration.count() - MinKeyPressDuration.count()));
+
+		const auto delayTime = std::chrono::milliseconds(static_cast<int>(delayFloat * 1000.0f));
+		const auto durationTime = std::chrono::milliseconds(static_cast<int>(scaledDuration));
+		const auto actionEndTime = std::chrono::steady_clock::now() + delayTime + durationTime;
+
+		Keyboard keyboard;
+		keyboard << KeyPress(keyFromIndex(actionIndex), delayTime, delayTime + durationTime);
+		keyboard.sendKeys();
+
+		std::unique_lock<std::mutex> lock(Mutex);
+
+		Condition.wait_until(lock, actionEndTime, []
+		{
+			return !KeepRunning || GlobalState.result != Result::None;
+		});
+
+		return GlobalState;
 	}
 
 	void run(Process& process, HyperParameters& hp)
@@ -80,48 +142,20 @@ namespace aita
 
 		float currentEpsilon = hp.epsilonStart;
 		GameState currentState;
-		GameState nextState;
 
 		while (KeepRunning && timeLeft())
 		{
-			if (!Semaphore.try_acquire_for(DefaultEpisodeTimeout))
+			if (!observeState(currentState))
 			{
-				std::cerr << "Failed to acquire semaphore for current state." << std::endl;
 				continue;
 			}
 
-			{
-				std::lock_guard<std::mutex> lock(Mutex);
-				currentState = GlobalState;
-			}
-
-			torch::Tensor stateTensor = toTensor(GlobalState);
-			auto [qValues, timings] = network.forward(stateTensor);
-			int64_t actionIndex = 0;
-
-			if (random(FloatDist) < currentEpsilon)
-			{
-				actionIndex = random(ActionDist);
-			}
-			else
-			{
-				actionIndex = qValues.argmax().item<int64_t>();
-			}
-
+			const torch::Tensor stateTensor = toTensor(currentState);
+			const auto [qValues, timings] = network.forward(stateTensor);
+			const int64_t actionIndex = decideAction(currentEpsilon, qValues);
 			currentEpsilon = std::max(hp.epsilonMin, currentEpsilon * hp.epsilonDecay);
 
-			// TODO: Execute action via Keyboard using actionIndex and timings
-
-			if (!Semaphore.try_acquire_for(DefaultEpisodeTimeout))
-			{
-				std::cerr << "Failed to acquire semaphore for next state." << std::endl;
-				continue;
-			}
-
-			{
-				std::lock_guard<std::mutex> lock(Mutex);
-				nextState = GlobalState;
-			}
+			const GameState nextState = executeActionAndWait(actionIndex, timings);
 
 			float reward = nextState.score - currentState.score;
 			bool done = (nextState.result != Result::None);
@@ -181,17 +215,19 @@ int main(int argc, char** argv)
 
 #ifdef WIN32
 		ensureForegroundWindow(L"Aita on matalin");
-		process.redirect(parseGameState);
 		GlobalState.reset();
+		process.redirect(parseGameState);
 #endif
 		if (arguments.contains("--example"))
 		{
 			Keyboard keyboard;
 			keyboard
-				<< KeyPress(VK_RIGHT, 0ms, 4250ms)
-				<< KeyPress(VK_SPACE, 1100ms, 1150ms);
+				<< KeyPress(Key::Right, 0ms, 4250ms)
+				<< KeyPress(Key::Jump, 1100ms, 1150ms);
 
 			keyboard.sendKeys();
+			keyboard.wait();
+			std::this_thread::sleep_for(3s);
 		}
 		else
 		{
@@ -200,6 +236,7 @@ int main(int argc, char** argv)
 		 	run(process, hp);
 		}
 
+		process.terminate(1223); // ERROR_CANCELLED
 		process.waitForExit();
 
 	} 
