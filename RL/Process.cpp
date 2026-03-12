@@ -9,7 +9,7 @@ namespace aita
 
 	Process::Process(const std::filesystem::path& path, const std::wstring& arguments) :
 		_path(path),
-		_arguments(arguments),
+		_arguments(std::format(L"{} {}", path.wstring(), arguments)),
 		_outputReadHandle(INVALID_HANDLE_VALUE),
 		_outputWriteHandle(INVALID_HANDLE_VALUE)
 	{
