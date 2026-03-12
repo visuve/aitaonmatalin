@@ -59,9 +59,9 @@ namespace aita
 			static_assert("Unsupported type");
 		}
 
-		inline bool contains(const std::string_view flag) const
+		inline bool contains(const std::string_view key) const
 		{
-			return find(flag) != "not found";
+			return find(key) != "not found";
 		}
 
 		inline std::filesystem::path parentPath() const
@@ -70,23 +70,32 @@ namespace aita
 		}
 
 	private:
-		inline std::string find(std::string_view flag) const
+		inline std::string find(std::string_view key) const
 		{
 			for (const std::string& argument : _arguments)
 			{
-				if (!argument.starts_with(flag) || !flag.starts_with(argument))
-				{
-					continue;
-				}
-
-				size_t equalSignIndex = argument.find_last_of('=');
-
-				if (equalSignIndex == std::string::npos)
+				if (argument == key)
 				{
 					return argument;
 				}
 
-				return argument.substr(++equalSignIndex);
+				size_t equalSignIndex = argument.find_first_of('=');
+
+				if (equalSignIndex == std::string::npos)
+				{
+					continue;
+				}
+
+				const std::string_view parsedKey = std::string_view(argument).substr(0, equalSignIndex);
+
+				if (parsedKey != key)
+				{
+					continue;
+				}
+
+				const std::string parsedValue = argument.substr(++equalSignIndex);
+
+				return parsedValue;
 			}
 
 			return "not found";
