@@ -106,6 +106,9 @@ namespace aita
 		epsilonStart = arguments.get<float>("--epsilon_start", DefaultEpsilonStart);
 		epsilonMin = arguments.get<float>("--epsilon_min", DefaultEpsilonMin);
 		epsilonDecay = arguments.get<float>("--epsilon_decay", DefaultEpsilonDecay);
+		batchSize = arguments.get<uint32_t>("--batch_size", DefaultBatchSize);
+		gamma = arguments.get<float>("--gamma", DefaultGamma);
+		learningRate = arguments.get<double>("--learning_rate", DefaultLearningRate);
 	}
 }
 
@@ -122,5 +125,8 @@ std::ostream& operator << (std::ostream& output, const aita::HyperParameters& hp
 	output << "Epsilon start: " << hp.epsilonStart << '\n';
 	output << "Epsilon min: " << hp.epsilonMin << '\n';
 	output << "Epsilon decay: " << hp.epsilonDecay << '\n';
+	output << "Batch size: " << hp.batchSize << '\n';
+	output << "Gamma: " << hp.gamma << '\n';
+	output << "Learning rate: " << hp.learningRate << '\n';
 	return output;
 }

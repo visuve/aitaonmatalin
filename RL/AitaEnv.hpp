@@ -57,6 +57,9 @@ namespace aita
 	constexpr float DefaultEpsilonStart = 1.0f;
 	constexpr float DefaultEpsilonMin = 0.05f;
 	constexpr float DefaultEpsilonDecay = 0.999f;
+	constexpr uint32_t DefaultBatchSize = 64;
+	constexpr float DefaultGamma = 0.99f;
+	constexpr float DefaultLearningRate = 0.0001f;
 
 	inline std::uniform_real_distribution<float> FloatDist(0.0f, 1.0f);
 	inline std::uniform_int_distribution<int64_t> ActionDist(0, DQNActions - 1);
@@ -69,6 +72,9 @@ namespace aita
 		float epsilonStart = DefaultEpsilonStart;
 		float epsilonMin = DefaultEpsilonMin;
 		float epsilonDecay = DefaultEpsilonDecay;
+		uint32_t batchSize = DefaultBatchSize;
+		float gamma = DefaultGamma;
+		float learningRate = DefaultLearningRate;
 
 		void parse(const Arguments&);
 	};
