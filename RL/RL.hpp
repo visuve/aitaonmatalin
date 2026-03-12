@@ -4,7 +4,7 @@
 
 namespace aita
 {
-	class DQN : torch::nn::Module
+	class DQN : public torch::nn::Module
 	{
 	public:
 		DQN(int64_t states, int64_t actions, int64_t hidden = 128);
