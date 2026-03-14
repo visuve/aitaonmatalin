@@ -2,6 +2,7 @@
 #include "Keyboard.hpp"
 #include "Process.hpp"
 #include "RL.hpp"
+#include "RingBuffer.hpp"
 
 namespace aita
 {
@@ -35,6 +36,11 @@ namespace aita
 	torch::Tensor toTensor(const GameState& state)
 	{
 		return torch::tensor({ state.posX, state.posY, state.velX, state.velY });
+	}
+
+	std::array<float, DQNStates> toArray(const GameState& state)
+	{
+		return { state.posX, state.posY, state.velX, state.velY };
 	}
 
 	void parseGameState(std::string_view processOutput)
@@ -131,7 +137,7 @@ namespace aita
 		};
 
 		DQN network(DQNStates, DQNActions);
-		RingBuffer<Transition> replayBuffer(hp.replayBufferSize);
+		RingBuffer<Transition<DQNStates>> replayBuffer(hp.replayBufferSize);
 		
 		const auto start = std::chrono::steady_clock::now();
 		const auto maximumExecTime = start + hp.timeout;
@@ -161,10 +167,10 @@ namespace aita
 			bool done = (nextState.result != Result::None);
 
 			replayBuffer.emplace(
-				stateTensor,
+				toArray(currentState),
 				actionIndex,
 				reward,
-				toTensor(nextState),
+				toArray(nextState),
 				done
 			);
 

@@ -1,7 +1,5 @@
 #pragma once
 
-#include "RingBuffer.hpp"
-
 namespace aita
 {
 	class DQN : public torch::nn::Module
@@ -26,12 +24,13 @@ namespace aita
 		return distribution(engine);
 	}
 
+	template <size_t N>
 	struct Transition
 	{
-		torch::Tensor state;
+		std::array<float, N> state;
 		int64_t action;
 		float reward;
-		torch::Tensor nextState;
+		std::array<float, N> nextState;
 		bool done;
 	};
 }
