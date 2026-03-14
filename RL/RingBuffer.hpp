@@ -2,7 +2,7 @@
 
 namespace aita
 {
-	template<typename T>
+	template<typename T> requires std::is_trivially_copyable_v<T>
 	class RingBuffer
 	{
 	public:
@@ -61,18 +61,71 @@ namespace aita
 				engine);
 		}
 
-		inline size_t count() const
+		size_t count() const
 		{
 			return _count;
 		}
 
-		inline size_t size() const
+		size_t size() const
 		{
 			return _size;
 		}
 
+		friend std::ostream& operator << (std::ostream& os, const RingBuffer& buffer)
+		{
+			os.write(reinterpret_cast<const char*>(&buffer._size), sizeof(buffer._size));
+			os.write(reinterpret_cast<const char*>(&buffer._index), sizeof(buffer._index));
+			os.write(reinterpret_cast<const char*>(&buffer._count), sizeof(buffer._count));
+			os.write(reinterpret_cast<const char*>(buffer._data.data()), buffer._size * sizeof(T));
+
+			return os;
+		}
+
+		friend std::istream& operator >> (std::istream& is, RingBuffer& buffer)
+		{
+			size_t savedSize = 0;
+			is.read(reinterpret_cast<char*>(&savedSize), sizeof(savedSize));
+
+			if (savedSize != buffer._size)
+			{
+				throw std::runtime_error("RingBuffer size mismatch during load");
+			}
+
+			is.read(reinterpret_cast<char*>(&buffer._index), sizeof(buffer._index));
+			is.read(reinterpret_cast<char*>(&buffer._count), sizeof(buffer._count));
+			is.read(reinterpret_cast<char*>(buffer._data.data()), buffer._size * sizeof(T));
+
+			return is;
+		}
+
+		void save(const std::filesystem::path& path) const
+		{
+			std::ofstream file(path, std::ios::binary);
+
+			if (!file)
+			{
+				std::println(std::cerr, "Failed to save: {}", path);
+				return;
+			}
+
+			file << *this;
+		}
+
+		void load(const std::filesystem::path& path)
+		{
+			std::ifstream file(path, std::ios::binary);
+
+			if (!file)
+			{
+				std::println(std::cerr, "Failed to load: {}", path);
+				return;
+			}
+
+			file >> *this;
+		}
+
 	private:
-		inline void advance()
+		void advance()
 		{
 			_index = (_index + 1) % _size;
 			_count += (_count < _size);
