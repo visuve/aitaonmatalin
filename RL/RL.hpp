@@ -16,6 +16,38 @@ namespace aita
 		torch::nn::Linear _layer3 = nullptr; // from-to timings (continuous)
 	};
 
+	struct Metric
+	{
+		const std::string name;
+		std::variant<float*, int64_t*> value;
+
+		void save(torch::serialize::OutputArchive& archive) const;
+		void load(torch::serialize::InputArchive& archive) const;
+	};
+
+	struct TrainingContext
+	{
+		std::shared_ptr<torch::nn::Module> network;
+		std::shared_ptr<torch::optim::Optimizer> optimizer;
+		std::vector<Metric> metrics;
+
+		void save(torch::serialize::OutputArchive& archive) const;
+		void load(torch::serialize::InputArchive& archive) const;
+	};
+
+	class Checkpoint
+	{
+	public:
+		Checkpoint(const std::filesystem::path& path, TrainingContext& context);
+		
+		void load();
+		void save();
+
+	private:
+		const std::filesystem::path _path;
+		TrainingContext& _context;
+	};
+
 	template <typename T>
 	auto random(T&& distribution)
 	{
