@@ -127,6 +127,56 @@ namespace aita
 		return GlobalState;
 	}
 
+	template <size_t N>
+	void loadReplayBuffer(RingBuffer<Transition<N>>& replayBuffer)
+	{
+		{
+			std::ifstream replayBufferFile("replay_buffer.bin", std::ios::binary);
+
+			if (replayBufferFile)
+			{
+				try
+				{
+					replayBufferFile >> replayBuffer;
+					std::println("Replay buffer loaded successfully.");
+				}
+				catch (const std::exception& e)
+				{
+					std::println(stderr, "Failed to load replay buffer: {}", e.what());
+				}
+			}
+			else
+			{
+				std::println(stderr, "No replay buffer file found. Starting with an empty buffer.");
+			}
+		}
+	}
+
+	template <size_t N>
+	void saveReplayBuffer(RingBuffer<Transition<N>>& replayBuffer)
+	{
+		{
+			std::ofstream replayBufferFile("replay_buffer.bin", std::ios::binary);
+
+			if (replayBufferFile)
+			{
+				try
+				{
+					replayBufferFile << replayBuffer;
+					std::println("Replay buffer saved successfully.");
+				}
+				catch (const std::exception& e)
+				{
+					std::println(stderr, "Failed to save replay buffer: {}", e.what());
+				}
+			}
+			else
+			{
+				std::println(stderr, "Failed to open replay buffer file for writing.");
+			}
+		}
+	}
+
 	void run(Process& process, HyperParameters& hp)
 	{
 		GameState::GameOverCallback = [](const GameState& state)
@@ -136,7 +186,9 @@ namespace aita
 				<< " Result: " << (state.result == Result::Won ? "Won" : "Lost") << std::endl;
 		};
 
-		DQN network(DQNStates, DQNActions);
+		auto network = std::make_shared<DQN>(DQNStates, DQNActions);
+		auto optimizer = std::make_shared<torch::optim::Adam>(network->parameters(), torch::optim::AdamOptions(hp.learningRate));
+
 		RingBuffer<Transition<DQNStates>> replayBuffer(hp.replayBufferSize);
 		
 		const auto start = std::chrono::steady_clock::now();
@@ -147,6 +199,33 @@ namespace aita
 		};
 
 		float currentEpsilon = hp.epsilonStart;
+		int64_t step = 0;
+		int64_t episode = 0;
+
+		TrainingContext context
+		{
+			network,
+			optimizer,
+			{
+				{ "epsilon", &currentEpsilon },
+				{ "step", &step },
+				{ "episode", &episode }
+			}
+		};
+
+		Checkpoint checkpoint("aita_dqn.pt", context);
+		loadReplayBuffer(replayBuffer);
+
+		try
+		{
+			checkpoint.load();
+			std::println("Checkpoint loaded successfully.");
+		}
+		catch (const std::exception& e)
+		{
+			std::println(stderr, "Starting fresh: {}", e.what());
+		}
+
 		GameState currentState;
 
 		while (KeepRunning && timeLeft())
@@ -157,8 +236,15 @@ namespace aita
 			}
 
 			const torch::Tensor stateTensor = toTensor(currentState);
-			const auto [qValues, timings] = network.forward(stateTensor);
+			const auto [qValues, timings] = network->forward(stateTensor);
+
 			const int64_t actionIndex = decideAction(currentEpsilon, qValues);
+			const int64_t delayIndex = actionIndex * 2;
+			const int64_t durationIndex = delayIndex + 1;
+
+			const float executedDelay = timings[delayIndex].item<float>();
+			const float executedDuration = timings[durationIndex].item<float>();
+
 			currentEpsilon = std::max(hp.epsilonMin, currentEpsilon * hp.epsilonDecay);
 
 			const GameState nextState = executeActionAndWait(actionIndex, timings);
@@ -166,9 +252,18 @@ namespace aita
 			float reward = nextState.score - currentState.score;
 			bool done = (nextState.result != Result::None);
 
+			++step;
+
+			if (done)
+			{
+				++episode;
+			}
+
 			replayBuffer.emplace(
 				toArray(currentState),
 				actionIndex,
+				executedDelay,
+				executedDuration,
 				reward,
 				toArray(nextState),
 				done
@@ -176,6 +271,20 @@ namespace aita
 
 			// TODO: Sample from replayBuffer and optimize network
 		}
+
+		std::println("Saving checkpoint...");
+
+		try
+		{
+			checkpoint.save();
+			std::println("Checkpoint saved to aita_dqn.pt");
+		}
+		catch (const std::exception& e)
+		{
+			std::println(stderr, "Failed to save checkpoint: {}", e.what());
+		}
+
+		saveReplayBuffer(replayBuffer);
 	}
 
 	BOOL WINAPI consoleHandler(DWORD ctrlType)
@@ -239,6 +348,7 @@ int main(int argc, char** argv)
 		{
 			HyperParameters hp;
 			hp.parse(arguments);
+			std::cout << hp << std::endl;
 		 	run(process, hp);
 		}
 
