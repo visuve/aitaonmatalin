@@ -61,6 +61,8 @@ namespace aita
 	{
 		std::array<float, N> state;
 		int64_t action;
+		float delay;
+		float duration;
 		float reward;
 		std::array<float, N> nextState;
 		bool done;
