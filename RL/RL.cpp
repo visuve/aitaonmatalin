@@ -3,11 +3,11 @@
 
 namespace aita
 {
-	DQN::DQN(int64_t states, int64_t actions, int64_t hidden) :
+	DQN::DQN(int64_t states, int64_t actions, int64_t timings, int64_t hidden) :
 		torch::nn::Module("aitaDQN"),
 		_layer1(register_module("layer1", torch::nn::Linear(states, hidden))),
 		_layer2(register_module("layer2", torch::nn::Linear(hidden, actions))),
-		_layer3(register_module("layer3", torch::nn::Linear(hidden, actions * 2)))
+		_layer3(register_module("layer3", torch::nn::Linear(hidden, timings)))
 	{
 	}
 

@@ -5,7 +5,7 @@ namespace aita
 	class DQN : public torch::nn::Module
 	{
 	public:
-		DQN(int64_t states, int64_t actions, int64_t hidden = 128);
+		DQN(int64_t states, int64_t actions, int64_t timings, int64_t hidden = 128);
 
 		// Returns a pair of q-values and time parameters
 		std::pair<torch::Tensor, torch::Tensor> forward(torch::Tensor input);
@@ -56,15 +56,14 @@ namespace aita
 		return distribution(engine);
 	}
 
-	template <size_t N>
+	template <size_t StateDim, size_t TimingDim>
 	struct Transition
 	{
-		std::array<float, N> state;
+		std::array<float, StateDim> state;
 		int64_t action;
-		float delay;
-		float duration;
+		std::array<float, TimingDim> timings;
 		float reward;
-		std::array<float, N> nextState;
+		std::array<float, StateDim> nextState;
 		bool done;
 	};
 }

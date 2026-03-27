@@ -29,6 +29,8 @@ namespace aita
 			case Key::Jump:
 				return "Jump";
 		}
+
+		throw std::invalid_argument("Invalid Key");
 	}
 
 #ifdef WIN32

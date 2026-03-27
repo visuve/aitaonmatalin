@@ -51,7 +51,9 @@ namespace aita
 	};
 
 	constexpr uint64_t DQNStates = 4; // posX, posY, velX, velY
-	constexpr uint64_t DQNActions = 3; // left, right, jump
+	constexpr uint64_t DQNKeys = 3;
+	constexpr uint64_t DQNActions = 1 << DQNKeys;
+	constexpr int64_t DQNTimings = DQNKeys * 2;
 
 	constexpr std::chrono::seconds DefaultTimeout = std::chrono::hours(1);
 	constexpr uint32_t DefaultReplayBufferSize = 1000;

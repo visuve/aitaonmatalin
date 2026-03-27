@@ -44,23 +44,29 @@ namespace aita
 		return { state.posX, state.posY, state.velX, state.velY };
 	}
 
-	std::string_view actionToString(int64_t index)
+	std::string actionToString(int64_t bitmask)
 	{
-		switch (index)
+		static const std::array<std::string, 8> ActionStrings = {
+			"None",
+			"Left",
+			"Right",
+			"Left + Right",
+			"Jump",
+			"Left + Jump",
+			"Right + Jump",
+			"Left + Right + Jump"
+		};
+
+		if (bitmask >= 0 && bitmask < ActionStrings.size())
 		{
-			case 0:
-				return "Left";
-			case 1:
-				return "Right";
-			case 2:
-				return "Up";
+			return ActionStrings[bitmask];
 		}
 
-		throw std::invalid_argument("Unknown action index");
+		return "Unknown";
 	}
 
-	template <size_t N>
-	void loadSession(RingBuffer<Transition<N>>& replayBuffer, Checkpoint& checkpoint)
+	template <size_t S, size_t T>
+	void loadSession(RingBuffer<Transition<S, T>>& replayBuffer, Checkpoint& checkpoint)
 	{
 		if (checkpoint.load())
 		{
@@ -81,8 +87,8 @@ namespace aita
 		}
 	}
 
-	template <size_t N>
-	void saveSession(const RingBuffer<Transition<N>>& replayBuffer, const Checkpoint& checkpoint)
+	template <size_t S, size_t T>
+	void saveSession(const RingBuffer<Transition<S, T>>& replayBuffer, const Checkpoint& checkpoint)
 	{
 		if (checkpoint.save())
 		{
@@ -162,22 +168,47 @@ namespace aita
 		return { qValues.argmax().item<int64_t>(), false };
 	}
 
-	GameState executeActionAndWait(int64_t actionIndex, float delayFloat, float durationFloat)
+	GameState executeActionAndWait(int64_t actionBitmask, const std::array<float, DQNTimings>& timings)
 	{
-		const float scaledDuration = MinKeyPressDuration.count() +
-			(durationFloat * (MaxKeyPressDuration.count() - MinKeyPressDuration.count()));
-
-		const auto delayTime = std::chrono::milliseconds(static_cast<int>(delayFloat * 1000.0f));
-		const auto durationTime = std::chrono::milliseconds(static_cast<int>(scaledDuration));
-		const auto actionEndTime = std::chrono::steady_clock::now() + delayTime + durationTime;
-
 		Keyboard keyboard;
-		keyboard << KeyPress(keyFromIndex(actionIndex), delayTime, delayTime + durationTime);
-		keyboard.sendKeys();
+		auto maxEndTime = std::chrono::steady_clock::now();
+		bool keysPressed = false;
+
+		for (size_t i = 0; i < DQNKeys; ++i)
+		{
+			if ((actionBitmask & (1 << i)) != 0)
+			{
+				keysPressed = true;
+				const float delayFloat = timings[i * 2];
+				const float durationFloat = timings[i * 2 + 1];
+
+				const float scaledDuration = MinKeyPressDuration.count() +
+					(durationFloat * (MaxKeyPressDuration.count() - MinKeyPressDuration.count()));
+
+				const auto delayTime = std::chrono::milliseconds(static_cast<int>(delayFloat * 1000.0f));
+				const auto durationTime = std::chrono::milliseconds(static_cast<int>(scaledDuration));
+				const auto endTime = std::chrono::steady_clock::now() + delayTime + durationTime;
+
+				keyboard << KeyPress(keyFromIndex(i), delayTime, delayTime + durationTime);
+
+				if (endTime > maxEndTime)
+				{
+					maxEndTime = endTime;
+				}
+			}
+		}
+
+		if (keysPressed)
+		{
+			keyboard.sendKeys();
+		}
+		else
+		{
+			maxEndTime = std::chrono::steady_clock::now() + 100ms;
+		}
 
 		std::unique_lock<std::mutex> lock(Mutex);
-
-		Condition.wait_until(lock, actionEndTime, []
+		Condition.wait_until(lock, maxEndTime, []
 		{
 			return !KeepRunning || GlobalState.result != Result::None;
 		});
@@ -185,19 +216,19 @@ namespace aita
 		return GlobalState;
 	}
 
-	template <size_t N>
+	template <size_t S, size_t T>
 	struct OptimizationContext
 	{
 		std::shared_ptr<DQN> network;
 		std::shared_ptr<DQN> targetNetwork;
 		std::shared_ptr<torch::optim::Optimizer> optimizer;
-		RingBuffer<Transition<N>>& replayBuffer;
-		std::vector<Transition<N>>& batch;
+		RingBuffer<Transition<S, T>>& replayBuffer;
+		std::vector<Transition<S, T>>& batch;
 		const HyperParameters& hp;
 	};
 
-	template <size_t N>
-	void optimizeNetwork(OptimizationContext<N>& ctx)
+	template <size_t S, size_t T>
+	void optimizeNetwork(OptimizationContext<S, T>& ctx)
 	{
 		if (ctx.replayBuffer.count() < ctx.hp.batchSize)
 		{
@@ -207,26 +238,25 @@ namespace aita
 		ctx.replayBuffer.randomSample(ctx.batch);
 
 		const int64_t batchSize = ctx.hp.batchSize;
-		torch::Tensor prevStateBatch = torch::empty({ batchSize, static_cast<int64_t>(N) }, torch::kFloat32);
-		torch::Tensor nextStateBatch = torch::empty({ batchSize, static_cast<int64_t>(N) }, torch::kFloat32);
+		torch::Tensor prevStateBatch = torch::empty({ batchSize, static_cast<int64_t>(S) }, torch::kFloat32);
+		torch::Tensor nextStateBatch = torch::empty({ batchSize, static_cast<int64_t>(S) }, torch::kFloat32);
 		torch::Tensor actionBatch = torch::empty({ batchSize, 1 }, torch::kInt64);
 		torch::Tensor rewardBatch = torch::empty({ batchSize }, torch::kFloat32);
 		torch::Tensor doneBatch = torch::empty({ batchSize }, torch::kBool);
-		torch::Tensor executedTimingsBatch = torch::empty({ batchSize, 2 }, torch::kFloat32);
+		torch::Tensor executedTimingsBatch = torch::empty({ batchSize, static_cast<int64_t>(T) }, torch::kFloat32);
 
-		for (int64_t i = 0; i < batchSize; ++i)
+		for (size_t i = 0; i < batchSize; ++i)
 		{
-			const Transition<N>& t = ctx.batch[i];
+			const Transition<S, T>& t = ctx.batch[i];
 
-			std::memcpy(prevStateBatch[i].data_ptr<float>(), t.state.data(), N * sizeof(float));
-			std::memcpy(nextStateBatch[i].data_ptr<float>(), t.nextState.data(), N * sizeof(float));
+			std::memcpy(prevStateBatch[i].data_ptr<float>(), t.state.data(), S * sizeof(float));
+			std::memcpy(nextStateBatch[i].data_ptr<float>(), t.nextState.data(), S * sizeof(float));
 
 			actionBatch[i][0] = t.action;
 			rewardBatch[i] = t.reward;
 			doneBatch[i] = t.done;
 
-			executedTimingsBatch[i][0] = t.delay;
-			executedTimingsBatch[i][1] = t.duration;
+			std::memcpy(executedTimingsBatch[i].data_ptr<float>(), t.timings.data(), T * sizeof(float));
 		}
 
 		auto [currentQValues, currentTimings] = ctx.network->forward(prevStateBatch);
@@ -243,15 +273,27 @@ namespace aita
 		torch::Tensor expectedStateActionValues = rewardBatch + (ctx.hp.gamma * nextStateValues);
 		torch::Tensor qLoss = torch::nn::functional::smooth_l1_loss(stateActionValues, expectedStateActionValues);
 
-		torch::Tensor predictedTimings = torch::empty({ batchSize, 2 }, torch::kFloat32);
+		torch::Tensor mask = torch::zeros({ batchSize, static_cast<int64_t>(T) }, torch::kFloat32);
 		for (int64_t i = 0; i < batchSize; ++i)
 		{
-			const int64_t idx = actionBatch[i].item<int64_t>() * 2;
-			predictedTimings[i][0] = currentTimings[i][idx];
-			predictedTimings[i][1] = currentTimings[i][idx + 1];
+			int64_t action = actionBatch[i][0].item<int64_t>();
+
+			for (size_t k = 0; k < DQNKeys; ++k)
+			{
+				if ((action & (1 << k)) != 0)
+				{
+					mask[i][k * 2] = 1.0f;
+					mask[i][k * 2 + 1] = 1.0f;
+				}
+			}
 		}
 
-		torch::Tensor timingLoss = torch::nn::functional::mse_loss(predictedTimings, executedTimingsBatch);
+		torch::Tensor timingLoss = torch::nn::functional::mse_loss(
+			currentTimings,
+			executedTimingsBatch,
+			torch::nn::functional::MSELossFuncOptions().reduction(torch::kNone)
+		);
+		timingLoss = (timingLoss * mask).sum() / mask.sum().clamp_min(1.0f);
 
 		torch::Tensor totalLoss = qLoss + timingLoss;
 
@@ -282,8 +324,8 @@ namespace aita
 				state.result == Result::Won ? "Won" : "Lost");
 		};
 
-		auto network = std::make_shared<DQN>(DQNStates, DQNActions);
-		auto targetNetwork = std::make_shared<DQN>(DQNStates, DQNActions);
+		auto network = std::make_shared<DQN>(DQNStates, DQNActions, DQNTimings);
+		auto targetNetwork = std::make_shared<DQN>(DQNStates, DQNActions, DQNTimings);
 
 		{
 			torch::NoGradGuard noGrad;
@@ -295,7 +337,7 @@ namespace aita
 			}
 		}
 
-		auto optimizer = 
+		auto optimizer =
 			std::make_shared<torch::optim::Adam>(
 				network->parameters(),
 				torch::optim::AdamOptions(hp.learningRate));
@@ -315,12 +357,12 @@ namespace aita
 			}
 		};
 
-		RingBuffer<Transition<DQNStates>> replayBuffer(hp.replayBufferSize);
-		std::vector<Transition<DQNStates>> batch(hp.batchSize);
+		RingBuffer<Transition<DQNStates, DQNTimings>> replayBuffer(hp.replayBufferSize);
+		std::vector<Transition<DQNStates, DQNTimings>> batch(hp.batchSize);
 		Checkpoint checkpoint("aita_dqn.pt", context);
 		GameState currentState;
 
-		OptimizationContext<DQNStates> optContext{
+		OptimizationContext<DQNStates, DQNTimings> optContext{
 			network,
 			targetNetwork,
 			optimizer,
@@ -348,20 +390,27 @@ namespace aita
 			const torch::Tensor stateTensor = toTensor(currentState);
 			const auto [qValues, timings] = network->forward(stateTensor);
 
-			const auto [actionIndex, isExploration] = decideAction(currentEpsilon, qValues);
-			const int64_t delayIndex = actionIndex * 2;
-			const int64_t durationIndex = delayIndex + 1;
+			const auto [actionBitmask, isExploration] = decideAction(currentEpsilon, qValues);
 
-			float executedDelay = timings[delayIndex].item<float>();
-			float executedDuration = timings[durationIndex].item<float>();
+			std::array<float, DQNTimings> executedTimings;
 
-			if (isExploration)
+			for (size_t i = 0; i < DQNKeys; ++i)
 			{
-				executedDelay = random(FloatDist);
-				executedDuration = random(FloatDist);
+				if (isExploration)
+				{
+					executedTimings[i * 2] = random(FloatDist);
+					executedTimings[i * 2 + 1] = random(FloatDist);
+				}
+				else
+				{
+					executedTimings[i * 2] = timings[i * 2].item<float>();
+					executedTimings[i * 2 + 1] = timings[i * 2 + 1].item<float>();
+				}
 			}
 
-			const GameState nextState = executeActionAndWait(actionIndex, executedDelay, executedDuration);
+			LOGD("Step {}: Action [{}] chosen", step, actionToString(actionBitmask));
+
+			const GameState nextState = executeActionAndWait(actionBitmask, executedTimings);
 
 			float reward = (nextState.score - currentState.score) - KeyPressPenalty;
 			bool done = (nextState.result != Result::None);
@@ -383,9 +432,8 @@ namespace aita
 
 			replayBuffer.emplace(
 				toArray(currentState),
-				actionIndex,
-				executedDelay,
-				executedDuration,
+				actionBitmask,
+				executedTimings,
 				reward,
 				toArray(nextState),
 				done
@@ -441,7 +489,7 @@ int main(int argc, char** argv)
 		process.start();
 
 #ifdef WIN32
-		ensureForegroundWindow(L"Aita on matalin");
+		ensureForegroundWindow(L"Aita on matalin - The Fence Jump Game");
 		GlobalState.reset();
 		process.redirect(parseGameState);
 #endif
@@ -462,7 +510,7 @@ int main(int argc, char** argv)
 			HyperParameters hp;
 			hp.parse(arguments);
 			LOGI("Hyper parameters:\n{}", hp);
-		 	run(process, hp);
+			run(process, hp);
 		}
 
 		process.terminate(1223); // ERROR_CANCELLED
