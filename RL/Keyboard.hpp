@@ -10,12 +10,13 @@ namespace aita
 	};
 
 	Key keyFromIndex(int64_t index);
+	std::string_view toString(Key key);
 
 	class KeyPress
 	{
 	public:
 		KeyPress(Key key, std::chrono::milliseconds from, std::chrono::milliseconds to);
-		void execute(std::stop_source stop_source, std::chrono::steady_clock::time_point then);
+		void execute(std::stop_source stop_source, std::chrono::steady_clock::time_point startTime);
 	private:
 		Key _key;
 		std::chrono::milliseconds _from;

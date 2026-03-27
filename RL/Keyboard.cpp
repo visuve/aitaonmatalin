@@ -1,4 +1,5 @@
 #include "Keyboard.hpp"
+#include "Logger.hpp"
 
 namespace aita
 {
@@ -17,8 +18,22 @@ namespace aita
 		throw std::invalid_argument("Invalid index");
 	}
 
+	std::string_view toString(Key key)
+	{
+		switch (key)
+		{
+			case Key::Left:
+				return "Left";
+			case Key::Right:
+				return "Right";
+			case Key::Jump:
+				return "Jump";
+		}
+	}
+
 #ifdef WIN32
 	constexpr DWORD KeyDown = 0x0000;
+	constexpr DWORD KeyExtended = 0x0001;
 	constexpr DWORD KeyUp = 0x0002;
 
 	BYTE toVirtualKey(Key key)
@@ -42,28 +57,52 @@ namespace aita
 		_from(from),
 		_to(to)
 	{
+		LOGD("{} {} {}", toString(key), from, to);
 	}
 
-	void KeyPress::execute(std::stop_source stop_source, std::chrono::steady_clock::time_point then)
+	void KeyPress::execute(std::stop_source stop_source, std::chrono::steady_clock::time_point startTime)
 	{
 		std::stop_token token = stop_source.get_token();
 
-		const auto offset = std::chrono::steady_clock::now() - then;
+		const auto offset = std::chrono::steady_clock::now() - startTime;
+		const auto delay = _from - offset;
+		const auto duration = _to - _from;
+
+		const auto wait = [&](std::chrono::nanoseconds waitTime)
+		{
+			if (waitTime <= std::chrono::milliseconds(1))
+			{
+				return true;
+			}
+
+			std::mutex mtx;
+			std::unique_lock<std::mutex> lock(mtx);
+			std::condition_variable_any cv;
+
+			cv.wait_for(lock, token, waitTime, []
+			{
+				return false;
+			});
+
+			return !token.stop_requested();
+		};
 
 #ifdef WIN32
 	 	const BYTE key = toVirtualKey(_key);
+		const UINT scan = static_cast<BYTE>(MapVirtualKeyW(key, MAPVK_VK_TO_VSC));
 
-		if (token.stop_requested())	{ return; }
-		std::this_thread::sleep_for(_from - offset);
+		if (!wait(delay))
+		{
+			return;
+		}
 
-		if (token.stop_requested()) { return; }
-		keybd_event(key, 0, KeyDown, 0);
+		keybd_event(key, scan, KeyDown | KeyExtended, 0);
 
-		if (token.stop_requested()) { return; }
-		std::this_thread::sleep_for(_to - _from);
+		wait(duration);
 
-		if (token.stop_requested()) { return; }
-		keybd_event(key, 0, KeyUp, 0);
+		keybd_event(key, scan, KeyUp | KeyExtended, 0);
+		
+		LOGD("{} executed", toString(_key));
 #endif
 	}
 
