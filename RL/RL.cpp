@@ -119,7 +119,7 @@ namespace aita
 		return false;
 	}
 
-	bool Checkpoint::save()
+	bool Checkpoint::save() const
 	{
 		try
 		{

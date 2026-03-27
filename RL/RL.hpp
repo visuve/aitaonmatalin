@@ -41,7 +41,7 @@ namespace aita
 		Checkpoint(const std::filesystem::path& path, TrainingContext& context);
 		
 		bool load();
-		bool save();
+		bool save() const;
 
 	private:
 		const std::filesystem::path _path;

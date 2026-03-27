@@ -53,8 +53,8 @@ namespace aita
 		}
 		catch (const std::exception& e)
 		{
-			std::cout << "Failed to parse game state from process output: " << processOutput << std::endl;
-			std::cout << "Exception: " << e.what() << std::endl;
+			std::println(std::cerr, "Failed to parse game state from process output: {}", processOutput);
+			std::println(std::cerr, "Exception: {}", e.what());
 			return;
 		}
 
@@ -76,7 +76,7 @@ namespace aita
 		if (!Condition.wait_for(lock, DefaultEpisodeTimeout,
 			[&] { return Sequence != currentSequence && GlobalState.result == Result::None; }))
 		{
-			std::cerr << "Timeout waiting for game state." << std::endl;
+			std::println(std::cerr, "Timeout waiting for game state.");
 			return false;
 		}
 
@@ -142,7 +142,7 @@ namespace aita
 	}
 
 	template <size_t N>
-	void saveSession(RingBuffer<Transition<N>>& replayBuffer, Checkpoint& checkpoint)
+	void saveSession(const RingBuffer<Transition<N>>& replayBuffer, const Checkpoint& checkpoint)
 	{
 		if (!checkpoint.save())
 		{
@@ -155,16 +155,116 @@ namespace aita
 		}
 	}
 
+	template <size_t N>
+	struct OptimizationContext
+	{
+		std::shared_ptr<DQN> network;
+		std::shared_ptr<DQN> targetNetwork;
+		std::shared_ptr<torch::optim::Optimizer> optimizer;
+		RingBuffer<Transition<N>>& replayBuffer;
+		std::vector<Transition<N>>& batch;
+		const HyperParameters& hp;
+	};
+
+	template <size_t N>
+	void optimizeNetwork(OptimizationContext<N>& ctx)
+	{
+		if (ctx.replayBuffer.count() < ctx.hp.batchSize)
+		{
+			return;
+		}
+
+		ctx.replayBuffer.randomSample(ctx.batch);
+
+		const int64_t batchSize = ctx.hp.batchSize;
+		torch::Tensor prevStateBatch = torch::empty({ batchSize, static_cast<int64_t>(N) }, torch::kFloat32);
+		torch::Tensor nextStateBatch = torch::empty({ batchSize, static_cast<int64_t>(N) }, torch::kFloat32);
+		torch::Tensor actionBatch = torch::empty({ batchSize, 1 }, torch::kInt64);
+		torch::Tensor rewardBatch = torch::empty({ batchSize }, torch::kFloat32);
+		torch::Tensor doneBatch = torch::empty({ batchSize }, torch::kBool);
+		torch::Tensor executedTimingsBatch = torch::empty({ batchSize, 2 }, torch::kFloat32);
+
+		for (int64_t i = 0; i < batchSize; ++i)
+		{
+			const Transition<N>& t = ctx.batch[i];
+
+			std::memcpy(prevStateBatch[i].data_ptr<float>(), t.state.data(), N * sizeof(float));
+			std::memcpy(nextStateBatch[i].data_ptr<float>(), t.nextState.data(), N * sizeof(float));
+
+			actionBatch[i][0] = t.action;
+			rewardBatch[i] = t.reward;
+			doneBatch[i] = t.done;
+
+			executedTimingsBatch[i][0] = t.delay;
+			executedTimingsBatch[i][1] = t.duration;
+		}
+
+		auto [currentQValues, currentTimings] = ctx.network->forward(prevStateBatch);
+		torch::Tensor stateActionValues = currentQValues.gather(1, actionBatch).squeeze(1);
+
+		torch::Tensor nextStateValues;
+		{
+			torch::NoGradGuard noGrad;
+			auto [nextQValues, _] = ctx.targetNetwork->forward(nextStateBatch);
+			nextStateValues = std::get<0>(nextQValues.max(1));
+			nextStateValues.masked_fill_(doneBatch, 0.0f);
+		}
+
+		torch::Tensor expectedStateActionValues = rewardBatch + (ctx.hp.gamma * nextStateValues);
+		torch::Tensor qLoss = torch::nn::functional::smooth_l1_loss(stateActionValues, expectedStateActionValues);
+
+		torch::Tensor predictedTimings = torch::empty({ batchSize, 2 }, torch::kFloat32);
+		for (int64_t i = 0; i < batchSize; ++i)
+		{
+			const int64_t idx = actionBatch[i].item<int64_t>() * 2;
+			predictedTimings[i][0] = currentTimings[i][idx];
+			predictedTimings[i][1] = currentTimings[i][idx + 1];
+		}
+
+		torch::Tensor timingLoss = torch::nn::functional::mse_loss(predictedTimings, executedTimingsBatch);
+
+		torch::Tensor totalLoss = qLoss + timingLoss;
+
+		ctx.optimizer->zero_grad();
+		totalLoss.backward();
+		torch::nn::utils::clip_grad_norm_(ctx.network->parameters(), 1.0);
+		ctx.optimizer->step();
+
+		{
+			torch::NoGradGuard noGrad;
+			const float tau = 0.005f;
+			auto params = ctx.network->parameters();
+			auto targetParams = ctx.targetNetwork->parameters();
+			for (size_t i = 0; i < params.size(); ++i)
+			{
+				targetParams[i].copy_(tau * params[i] + (1.0f - tau) * targetParams[i]);
+			}
+		}
+	}
+
 	void run(Process& process, HyperParameters& hp)
 	{
 		GameState::GameOverCallback = [](const GameState& state)
 		{
-			std::cout << "Game over! Final score: " << state.score
-				<< " Time: " << float(state.time.count() / 1000.0f)
-				<< " Result: " << (state.result == Result::Won ? "Won" : "Lost") << std::endl;
+			std::println("Game over! Final score: {} Time: {:.3f} Result: {}",
+				state.score,
+				state.time.count() / 1000.0f,
+				state.result == Result::Won ? "Won" : "Lost");
 		};
 
 		auto network = std::make_shared<DQN>(DQNStates, DQNActions);
+		auto targetNetwork = std::make_shared<DQN>(DQNStates, DQNActions);
+
+		{
+			torch::NoGradGuard noGrad;
+			auto params = network->parameters();
+			auto targetParams = targetNetwork->parameters();
+			for (size_t i = 0; i < params.size(); ++i)
+			{
+				targetParams[i].copy_(params[i]);
+			}
+		}
+
 		auto optimizer = std::make_shared<torch::optim::Adam>(network->parameters(), torch::optim::AdamOptions(hp.learningRate));
 
 		float currentEpsilon = hp.epsilonStart;
@@ -186,6 +286,15 @@ namespace aita
 		std::vector<Transition<DQNStates>> batch(hp.batchSize);
 		Checkpoint checkpoint("aita_dqn.pt", context);
 		GameState currentState;
+
+		OptimizationContext<DQNStates> optContext{
+			network,
+			targetNetwork,
+			optimizer,
+			replayBuffer,
+			batch,
+			hp
+		};
 
 		loadSession(replayBuffer, checkpoint);
 
@@ -213,8 +322,6 @@ namespace aita
 			const float executedDelay = timings[delayIndex].item<float>();
 			const float executedDuration = timings[durationIndex].item<float>();
 
-			currentEpsilon = std::max(hp.epsilonMin, currentEpsilon * hp.epsilonDecay);
-
 			const GameState nextState = executeActionAndWait(actionIndex, timings);
 
 			float reward = nextState.score - currentState.score;
@@ -225,6 +332,11 @@ namespace aita
 			if (done)
 			{
 				++episode;
+
+				if (episode % 10 == 0)
+				{
+					saveSession(replayBuffer, checkpoint);
+				}
 			}
 
 			replayBuffer.emplace(
@@ -237,37 +349,12 @@ namespace aita
 				done
 			);
 
-			if (replayBuffer.count() < hp.batchSize)
+			optimizeNetwork(optContext);
+
+			if (replayBuffer.count() >= hp.batchSize)
 			{
-				continue;
+				currentEpsilon = std::max(hp.epsilonMin, currentEpsilon * hp.epsilonDecay);
 			}
-
-			replayBuffer.randomSample(batch);
-
-			const int64_t batchSize = hp.batchSize;
-			torch::Tensor prevStateBatch = torch::empty({ batchSize, DQNStates }, torch::kFloat32);
-			torch::Tensor nextStateBatch = torch::empty({ batchSize, DQNStates }, torch::kFloat32);
-			torch::Tensor actionBatch = torch::empty({ batchSize, 1 }, torch::kInt64);
-			torch::Tensor rewardBatch = torch::empty({ batchSize }, torch::kFloat32);
-			torch::Tensor doneBatch = torch::empty({ batchSize }, torch::kBool);
-			torch::Tensor executedTimingsBatch = torch::empty({ batchSize, 2 }, torch::kFloat32);
-
-			for (int64_t i = 0; i < batchSize; ++i)
-			{
-				const Transition<DQNStates>& t = batch[i];
-
-				std::memcpy(prevStateBatch[i].data_ptr<float>(), t.state.data(), DQNStates * sizeof(float));
-				std::memcpy(nextStateBatch[i].data_ptr<float>(), t.nextState.data(), DQNStates * sizeof(float));
-
-				actionBatch[i][0] = t.action;
-				rewardBatch[i] = t.reward;
-				doneBatch[i] = t.done;
-
-				executedTimingsBatch[i][0] = t.delay;
-				executedTimingsBatch[i][1] = t.duration;
-			}
-
-			// TODO: optimize the network
 		}
 
 		saveSession(replayBuffer, checkpoint);
@@ -277,9 +364,6 @@ namespace aita
 	{
 		if (ctrlType == CTRL_CLOSE_EVENT)
 		{
-			// Return TRUE to signal that we've handled the event.
-			// This stops the OS from calling the next handler (Intel's crash handler).
-			// which ironically causes crash on exit (in my use case)
 			KeepRunning = false;
 			return TRUE;
 		}
@@ -294,7 +378,7 @@ int main(int argc, char** argv)
 	SetConsoleCtrlHandler(aita::consoleHandler, TRUE);
 #endif
 
-	puts("aitaRL");
+	std::println("aitaRL");
 
 	try
 	{
@@ -341,11 +425,10 @@ int main(int argc, char** argv)
 		process.terminate(1223); // ERROR_CANCELLED
 		process.waitForExit();
 
-	} 
+	}
 	catch (const std::exception& ex)
 	{
-		std::cerr << "An exception occurred: " << ex.what() << std::endl;
-
+		std::println(std::cerr, "An exception occurred: {}", ex.what());
 		return -1;
 	}
 
