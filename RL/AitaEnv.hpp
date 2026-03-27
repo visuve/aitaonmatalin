@@ -80,5 +80,51 @@ namespace aita
 	};
 }
 
-std::ostream& operator << (std::ostream& output, const aita::GameState& gs);
-std::ostream& operator << (std::ostream& output, const aita::HyperParameters& hp);
+template <>
+struct std::formatter<aita::GameState>
+{
+	constexpr auto parse(std::format_parse_context& ctx)
+	{
+		return ctx.begin();
+	}
+
+	auto format(const aita::GameState& gs, std::format_context& ctx) const
+	{
+		return std::format_to(ctx.out(), "{} {} {} {} {}",
+			gs.posX,
+			gs.posY,
+			gs.velX,
+			gs.velY,
+			gs.score);
+	}
+};
+
+template <>
+struct std::formatter<aita::HyperParameters>
+{
+	constexpr auto parse(std::format_parse_context& ctx)
+	{
+		return ctx.begin();
+	}
+
+	auto format(const aita::HyperParameters& hp, std::format_context& ctx) const
+	{
+		return std::format_to(ctx.out(),
+			"Timeout: {} seconds\n"
+			"Replay buffer size: {}\n"
+			"Epsilon start: {}\n"
+			"Epsilon min: {}\n"
+			"Epsilon decay: {}\n"
+			"Batch size: {}\n"
+			"Gamma: {}\n"
+			"Learning rate: {}\n",
+			hp.timeout.count(),
+			hp.replayBufferSize,
+			hp.epsilonStart,
+			hp.epsilonMin,
+			hp.epsilonDecay,
+			hp.batchSize,
+			hp.gamma,
+			hp.learningRate);
+	}
+};

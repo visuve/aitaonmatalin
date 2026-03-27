@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Logger.hpp"
+
 namespace aita
 {
 	template<typename T> requires std::is_trivially_copyable_v<T>
@@ -102,7 +104,7 @@ namespace aita
 		{
 			if (!std::filesystem::exists(path))
 			{
-				std::println(std::cerr, "{} does not exist", path.string());
+				LOGW("{} does not exist", path.string());
 				return false;
 			}
 
@@ -110,7 +112,7 @@ namespace aita
 
 			if (!file)
 			{
-				std::println(std::cerr, "Failed to load: {}", path.string());
+				LOGE("Failed to load: {}", path.string());
 				return false;
 			}
 
@@ -124,7 +126,7 @@ namespace aita
 
 			if (!file)
 			{
-				std::println(std::cerr, "Failed to save: {}", path.string());
+				LOGE("Failed to save: {}", path.string());
 				return false;
 			}
 

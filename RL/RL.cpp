@@ -1,4 +1,5 @@
 #include "RL.hpp"
+#include "Logger.hpp"
 
 namespace aita
 {
@@ -101,6 +102,7 @@ namespace aita
 	{
 		if (!std::filesystem::exists(_path))
 		{
+			LOGW("{} does not exist", _path.string());
 			return false;
 		}
 
@@ -113,7 +115,7 @@ namespace aita
 		}
 		catch (const std::exception& e)
 		{
-			std::println(std::cerr, "Failed to load checkpoint: {}", e.what());
+			LOGE("Failed to load checkpoint: {}", e.what());
 		}
 
 		return false;
@@ -130,7 +132,7 @@ namespace aita
 		}
 		catch (const std::exception& e)
 		{
-			std::println(std::cerr, "Failed to save checkpoint: {}", e.what());
+			LOGE("Failed to save checkpoint: {}", e.what());
 		}
 
 		return false;

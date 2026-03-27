@@ -1,4 +1,5 @@
 #include "Process.hpp"
+#include "Logger.hpp"
 
 namespace aita
 {
@@ -106,11 +107,11 @@ namespace aita
 					how(output);
 				}
 
-				std::cout << "Process exited with code: " << exitCode() << std::endl;
+				LOGI("Process exited with code: {}", exitCode());
 			}
 			catch (const std::exception& ex)
 			{
-				std::cerr << "Error in process output redirection: " << ex.what() << std::endl;
+				LOGE("Error in process output redirection: {}", ex.what());
 			}
 		});
 	}

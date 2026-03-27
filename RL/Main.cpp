@@ -3,6 +3,7 @@
 #include "Process.hpp"
 #include "RL.hpp"
 #include "RingBuffer.hpp"
+#include "Logger.hpp"
 
 namespace aita
 {
@@ -13,16 +14,16 @@ namespace aita
 
 		while (!window)
 		{
-			std::println("Waiting for the game window to appear...");
+			LOGI("Waiting for the game window to appear...");
 			Sleep(250);
 			window = FindWindowW(NULL, L"Aita on matalin");
 		}
 
-		std::println("Window found!");
+		LOGI("Window found!");
 
 		if (!SetForegroundWindow(window))
 		{
-			std::println("Failed to set foreground window.");
+			LOGW("Failed to set foreground window.");
 		}
 	}
 #endif
@@ -43,6 +44,21 @@ namespace aita
 		return { state.posX, state.posY, state.velX, state.velY };
 	}
 
+	std::string_view actionToString(int64_t index)
+	{
+		switch (index)
+		{
+			case 0:
+				return "Left";
+			case 1:
+				return "Right";
+			case 2:
+				return "Up";
+		}
+
+		throw std::invalid_argument("Unknown action index");
+	}
+
 	void parseGameState(std::string_view processOutput)
 	{
 		GameState localState;
@@ -53,8 +69,7 @@ namespace aita
 		}
 		catch (const std::exception& e)
 		{
-			std::println(std::cerr, "Failed to parse game state from process output: {}", processOutput);
-			std::println(std::cerr, "Exception: {}", e.what());
+			LOGE("Failed to parse game state from process output: {}. Exception {}", processOutput, e.what());
 			return;
 		}
 
@@ -76,7 +91,7 @@ namespace aita
 		if (!Condition.wait_for(lock, DefaultEpisodeTimeout,
 			[&] { return Sequence != currentSequence && GlobalState.result == Result::None; }))
 		{
-			std::println(std::cerr, "Timeout waiting for game state.");
+			LOGW("Timeout waiting for game state.");
 			return false;
 		}
 
@@ -130,28 +145,44 @@ namespace aita
 	template <size_t N>
 	void loadSession(RingBuffer<Transition<N>>& replayBuffer, Checkpoint& checkpoint)
 	{
-		if (!checkpoint.load())
+		if (checkpoint.load())
 		{
-			std::println(std::cerr, "Starting new checkpoint");
+			LOGI("Checkpoint loaded");
+		}
+		else
+		{
+			LOGI("Starting new checkpoint");
 		}
 
-		if (!replayBuffer.load("replay_buffer.bin"))
+		if (replayBuffer.load("replay_buffer.bin"))
 		{
-			std::println(std::cerr, "Starting new replay buffer");
+			LOGI("Replay buffer loaded");
+		}
+		else
+		{
+			LOGI("Starting new replay buffer");
 		}
 	}
 
 	template <size_t N>
 	void saveSession(const RingBuffer<Transition<N>>& replayBuffer, const Checkpoint& checkpoint)
 	{
-		if (!checkpoint.save())
+		if (checkpoint.save())
 		{
-			std::println(std::cerr, "Failed to save checkpoint");
+			LOGI("Checkpoint saved");
+		}
+		else
+		{
+			LOGE("Failed to save checkpoint");
 		}
 
-		if (!replayBuffer.save("replay_buffer.bin"))
+		if (replayBuffer.save("replay_buffer.bin"))
 		{
-			std::println(std::cerr, "Failed to save replay buffer");
+			LOGI("Replay buffer saved");
+		}
+		else
+		{
+			LOGE("Failed to save replay buffer");
 		}
 	}
 
@@ -246,7 +277,7 @@ namespace aita
 	{
 		GameState::GameOverCallback = [](const GameState& state)
 		{
-			std::println("Game over! Final score: {} Time: {:.3f} Result: {}",
+			LOGI("Game over! Final score: {} Time: {:.3f} Result: {}",
 				state.score,
 				state.time.count() / 1000.0f,
 				state.result == Result::Won ? "Won" : "Lost");
@@ -265,7 +296,10 @@ namespace aita
 			}
 		}
 
-		auto optimizer = std::make_shared<torch::optim::Adam>(network->parameters(), torch::optim::AdamOptions(hp.learningRate));
+		auto optimizer = 
+			std::make_shared<torch::optim::Adam>(
+				network->parameters(),
+				torch::optim::AdamOptions(hp.learningRate));
 
 		float currentEpsilon = hp.epsilonStart;
 		int64_t step = 0;
@@ -322,6 +356,9 @@ namespace aita
 			const float executedDelay = timings[delayIndex].item<float>();
 			const float executedDuration = timings[durationIndex].item<float>();
 
+			LOGD("Step {}: Key {} chosen (Delay: {:.3f}s, Duration: {:.3f}s)",
+				step, actionToString(actionIndex), executedDelay, executedDuration);
+
 			const GameState nextState = executeActionAndWait(actionIndex, timings);
 
 			float reward = nextState.score - currentState.score;
@@ -332,6 +369,9 @@ namespace aita
 			if (done)
 			{
 				++episode;
+
+				LOGI("Episode {} ended. Steps: {} | Epsilon: {:.4f} | Buffer: {}/{}",
+					episode, step, currentEpsilon, replayBuffer.count(), hp.replayBufferSize);
 
 				if (episode % 10 == 0)
 				{
@@ -378,7 +418,7 @@ int main(int argc, char** argv)
 	SetConsoleCtrlHandler(aita::consoleHandler, TRUE);
 #endif
 
-	std::println("aitaRL");
+	aita::LOGI("aitaRL");
 
 	try
 	{
@@ -418,7 +458,7 @@ int main(int argc, char** argv)
 		{
 			HyperParameters hp;
 			hp.parse(arguments);
-			std::cout << hp << std::endl;
+			LOGI("Hyper parameters:\n{}", hp);
 		 	run(process, hp);
 		}
 
@@ -428,7 +468,7 @@ int main(int argc, char** argv)
 	}
 	catch (const std::exception& ex)
 	{
-		std::println(std::cerr, "An exception occurred: {}", ex.what());
+		aita::LOGE("An exception occurred: {}", ex.what());
 		return -1;
 	}
 
