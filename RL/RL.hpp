@@ -40,8 +40,8 @@ namespace aita
 	public:
 		Checkpoint(const std::filesystem::path& path, TrainingContext& context);
 		
-		void load();
-		void save();
+		bool load();
+		bool save();
 
 	private:
 		const std::filesystem::path _path;

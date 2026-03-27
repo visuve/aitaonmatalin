@@ -98,30 +98,38 @@ namespace aita
 			return is;
 		}
 
-		void save(const std::filesystem::path& path) const
+		bool load(const std::filesystem::path& path)
+		{
+			if (!std::filesystem::exists(path))
+			{
+				std::println(std::cerr, "{} does not exist", path.string());
+				return false;
+			}
+
+			std::ifstream file(path, std::ios::binary);
+
+			if (!file)
+			{
+				std::println(std::cerr, "Failed to load: {}", path.string());
+				return false;
+			}
+
+			file >> *this;
+			return true;
+		}
+
+		bool save(const std::filesystem::path& path) const
 		{
 			std::ofstream file(path, std::ios::binary);
 
 			if (!file)
 			{
-				std::println(std::cerr, "Failed to save: {}", path);
-				return;
+				std::println(std::cerr, "Failed to save: {}", path.string());
+				return false;
 			}
 
 			file << *this;
-		}
-
-		void load(const std::filesystem::path& path)
-		{
-			std::ifstream file(path, std::ios::binary);
-
-			if (!file)
-			{
-				std::println(std::cerr, "Failed to load: {}", path);
-				return;
-			}
-
-			file >> *this;
+			return true;
 		}
 
 	private:

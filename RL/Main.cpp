@@ -128,52 +128,30 @@ namespace aita
 	}
 
 	template <size_t N>
-	void loadReplayBuffer(RingBuffer<Transition<N>>& replayBuffer)
+	void loadSession(RingBuffer<Transition<N>>& replayBuffer, Checkpoint& checkpoint)
 	{
+		if (!checkpoint.load())
 		{
-			std::ifstream replayBufferFile("replay_buffer.bin", std::ios::binary);
+			std::println(std::cerr, "Starting new checkpoint");
+		}
 
-			if (replayBufferFile)
-			{
-				try
-				{
-					replayBufferFile >> replayBuffer;
-					std::println("Replay buffer loaded successfully.");
-				}
-				catch (const std::exception& e)
-				{
-					std::println(stderr, "Failed to load replay buffer: {}", e.what());
-				}
-			}
-			else
-			{
-				std::println(stderr, "No replay buffer file found. Starting with an empty buffer.");
-			}
+		if (!replayBuffer.load("replay_buffer.bin"))
+		{
+			std::println(std::cerr, "Starting new replay buffer");
 		}
 	}
 
 	template <size_t N>
-	void saveReplayBuffer(RingBuffer<Transition<N>>& replayBuffer)
+	void saveSession(RingBuffer<Transition<N>>& replayBuffer, Checkpoint& checkpoint)
 	{
+		if (!checkpoint.save())
 		{
-			std::ofstream replayBufferFile("replay_buffer.bin", std::ios::binary);
+			std::println(std::cerr, "Failed to save checkpoint");
+		}
 
-			if (replayBufferFile)
-			{
-				try
-				{
-					replayBufferFile << replayBuffer;
-					std::println("Replay buffer saved successfully.");
-				}
-				catch (const std::exception& e)
-				{
-					std::println(stderr, "Failed to save replay buffer: {}", e.what());
-				}
-			}
-			else
-			{
-				std::println(stderr, "Failed to open replay buffer file for writing.");
-			}
+		if (!replayBuffer.save("replay_buffer.bin"))
+		{
+			std::println(std::cerr, "Failed to save replay buffer");
 		}
 	}
 
@@ -188,15 +166,6 @@ namespace aita
 
 		auto network = std::make_shared<DQN>(DQNStates, DQNActions);
 		auto optimizer = std::make_shared<torch::optim::Adam>(network->parameters(), torch::optim::AdamOptions(hp.learningRate));
-
-		RingBuffer<Transition<DQNStates>> replayBuffer(hp.replayBufferSize);
-		
-		const auto start = std::chrono::steady_clock::now();
-		const auto maximumExecTime = start + hp.timeout;
-		const auto timeLeft = [&maximumExecTime]()->bool
-		{
-			return std::chrono::steady_clock::now() < maximumExecTime;
-		};
 
 		float currentEpsilon = hp.epsilonStart;
 		int64_t step = 0;
@@ -213,20 +182,18 @@ namespace aita
 			}
 		};
 
+		RingBuffer<Transition<DQNStates>> replayBuffer(hp.replayBufferSize);
 		Checkpoint checkpoint("aita_dqn.pt", context);
-		loadReplayBuffer(replayBuffer);
-
-		try
-		{
-			checkpoint.load();
-			std::println("Checkpoint loaded successfully.");
-		}
-		catch (const std::exception& e)
-		{
-			std::println(stderr, "Starting fresh: {}", e.what());
-		}
-
 		GameState currentState;
+
+		loadSession(replayBuffer, checkpoint);
+
+		const auto start = std::chrono::steady_clock::now();
+		const auto maximumExecTime = start + hp.timeout;
+		const auto timeLeft = [&maximumExecTime]()->bool
+		{
+			return std::chrono::steady_clock::now() < maximumExecTime;
+		};
 
 		while (KeepRunning && timeLeft())
 		{
@@ -269,22 +236,10 @@ namespace aita
 				done
 			);
 
-			// TODO: Sample from replayBuffer and optimize network
+			// TODO: Sample from replayBuffer
 		}
 
-		std::println("Saving checkpoint...");
-
-		try
-		{
-			checkpoint.save();
-			std::println("Checkpoint saved to aita_dqn.pt");
-		}
-		catch (const std::exception& e)
-		{
-			std::println(stderr, "Failed to save checkpoint: {}", e.what());
-		}
-
-		saveReplayBuffer(replayBuffer);
+		saveSession(replayBuffer, checkpoint);
 	}
 
 	BOOL WINAPI consoleHandler(DWORD ctrlType)

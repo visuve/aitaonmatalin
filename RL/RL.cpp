@@ -97,40 +97,42 @@ namespace aita
 	{
 	}
 
-	void Checkpoint::load()
+	bool Checkpoint::load()
 	{
 		if (!std::filesystem::exists(_path))
 		{
-			throw std::runtime_error("Checkpoint does not exist: " + _path.string());
+			return false;
 		}
-
-		torch::serialize::InputArchive archive;
 
 		try
 		{
+			torch::serialize::InputArchive archive;
 			archive.load_from(_path.string());
+			_context.load(archive);
+			return true;
 		}
 		catch (const std::exception& e)
 		{
-			throw std::runtime_error("Failed to load checkpoint: " + std::string(e.what()));
+			std::println(std::cerr, "Failed to load checkpoint: {}", e.what());
 		}
 
-		_context.load(archive);
+		return false;
 	}
 
-	void Checkpoint::save()
+	bool Checkpoint::save()
 	{
-		torch::serialize::OutputArchive archive;
-
-		_context.save(archive);
-
 		try
 		{
+			torch::serialize::OutputArchive archive;
+			_context.save(archive);
 			archive.save_to(_path.string());
+			return true;
 		}
 		catch (const std::exception& e)
 		{
-			throw std::runtime_error("Failed to save checkpoint: " + std::string(e.what()));
+			std::println(std::cerr, "Failed to save checkpoint: {}", e.what());
 		}
+
+		return false;
 	}
 }
