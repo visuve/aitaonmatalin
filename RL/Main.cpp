@@ -16,7 +16,7 @@ namespace aita
 		{
 			LOGI("Waiting for the game window to appear...");
 			Sleep(250);
-			window = FindWindowW(NULL, L"Aita on matalin");
+			window = FindWindowW(NULL, L"Aita on matalin - The Fence Jump Game");
 		}
 
 		LOGI("Window found!");
@@ -59,6 +59,50 @@ namespace aita
 		throw std::invalid_argument("Unknown action index");
 	}
 
+	template <size_t N>
+	void loadSession(RingBuffer<Transition<N>>& replayBuffer, Checkpoint& checkpoint)
+	{
+		if (checkpoint.load())
+		{
+			LOGI("Checkpoint loaded");
+		}
+		else
+		{
+			LOGI("Starting new checkpoint");
+		}
+
+		if (replayBuffer.load("aita_rb.bin"))
+		{
+			LOGI("Replay buffer loaded");
+		}
+		else
+		{
+			LOGI("Starting new replay buffer");
+		}
+	}
+
+	template <size_t N>
+	void saveSession(const RingBuffer<Transition<N>>& replayBuffer, const Checkpoint& checkpoint)
+	{
+		if (checkpoint.save())
+		{
+			LOGI("Checkpoint saved");
+		}
+		else
+		{
+			LOGE("Failed to save checkpoint");
+		}
+
+		if (replayBuffer.save("aita_rb.bin"))
+		{
+			LOGI("Replay buffer saved");
+		}
+		else
+		{
+			LOGE("Failed to save replay buffer");
+		}
+	}
+
 	void parseGameState(std::string_view processOutput)
 	{
 		GameState localState;
@@ -88,6 +132,8 @@ namespace aita
 
 		const uint64_t currentSequence = Sequence;
 
+		LOGD("Observing...");
+
 		if (!Condition.wait_for(lock, DefaultEpisodeTimeout,
 			[&] { return Sequence != currentSequence && GlobalState.result == Result::None; }))
 		{
@@ -104,23 +150,20 @@ namespace aita
 		return true;
 	}
 
-	int64_t decideAction(float currentEpsilon, const torch::Tensor& qValues)
+	std::pair<int64_t, bool> decideAction(float currentEpsilon, const torch::Tensor& qValues)
 	{
-		if (random(FloatDist) < currentEpsilon)
+		const bool isExploration = random(FloatDist) < currentEpsilon;
+
+		if (isExploration)
 		{
-			return random(ActionDist);
+			return { random(ActionDist), true };
 		}
-		
-		return qValues.argmax().item<int64_t>();
+
+		return { qValues.argmax().item<int64_t>(), false };
 	}
 
-	GameState executeActionAndWait(int64_t actionIndex, const torch::Tensor& timings)
+	GameState executeActionAndWait(int64_t actionIndex, float delayFloat, float durationFloat)
 	{
-		const int64_t delayIndex = actionIndex * 2;
-		const int64_t durationIndex = delayIndex + 1;
-
-		const float delayFloat = timings[delayIndex].item<float>();
-		const float durationFloat = timings[durationIndex].item<float>();
 		const float scaledDuration = MinKeyPressDuration.count() +
 			(durationFloat * (MaxKeyPressDuration.count() - MinKeyPressDuration.count()));
 
@@ -140,50 +183,6 @@ namespace aita
 		});
 
 		return GlobalState;
-	}
-
-	template <size_t N>
-	void loadSession(RingBuffer<Transition<N>>& replayBuffer, Checkpoint& checkpoint)
-	{
-		if (checkpoint.load())
-		{
-			LOGI("Checkpoint loaded");
-		}
-		else
-		{
-			LOGI("Starting new checkpoint");
-		}
-
-		if (replayBuffer.load("replay_buffer.bin"))
-		{
-			LOGI("Replay buffer loaded");
-		}
-		else
-		{
-			LOGI("Starting new replay buffer");
-		}
-	}
-
-	template <size_t N>
-	void saveSession(const RingBuffer<Transition<N>>& replayBuffer, const Checkpoint& checkpoint)
-	{
-		if (checkpoint.save())
-		{
-			LOGI("Checkpoint saved");
-		}
-		else
-		{
-			LOGE("Failed to save checkpoint");
-		}
-
-		if (replayBuffer.save("replay_buffer.bin"))
-		{
-			LOGI("Replay buffer saved");
-		}
-		else
-		{
-			LOGE("Failed to save replay buffer");
-		}
 	}
 
 	template <size_t N>
@@ -349,17 +348,21 @@ namespace aita
 			const torch::Tensor stateTensor = toTensor(currentState);
 			const auto [qValues, timings] = network->forward(stateTensor);
 
-			const int64_t actionIndex = decideAction(currentEpsilon, qValues);
+			const auto [actionIndex, isExploration] = decideAction(currentEpsilon, qValues);
 			const int64_t delayIndex = actionIndex * 2;
 			const int64_t durationIndex = delayIndex + 1;
 
-			const float executedDelay = timings[delayIndex].item<float>();
-			const float executedDuration = timings[durationIndex].item<float>();
+			float executedDelay = timings[delayIndex].item<float>();
+			float executedDuration = timings[durationIndex].item<float>();
 
-			LOGD("Step {}: Key {} chosen (Delay: {:.3f}s, Duration: {:.3f}s)",
-				step, actionToString(actionIndex), executedDelay, executedDuration);
+			if (isExploration)
+			{
+				executedDelay = random(FloatDist);
+				executedDuration = random(FloatDist);
+			}
 
-			const GameState nextState = executeActionAndWait(actionIndex, timings);
+			// Pass the explicit float values instead of the tensor
+			const GameState nextState = executeActionAndWait(actionIndex, executedDelay, executedDuration);
 
 			float reward = nextState.score - currentState.score;
 			bool done = (nextState.result != Result::None);
@@ -452,6 +455,7 @@ int main(int argc, char** argv)
 
 			keyboard.sendKeys();
 			keyboard.wait();
+
 			std::this_thread::sleep_for(3s);
 		}
 		else
