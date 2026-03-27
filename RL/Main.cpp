@@ -183,6 +183,7 @@ namespace aita
 		};
 
 		RingBuffer<Transition<DQNStates>> replayBuffer(hp.replayBufferSize);
+		std::vector<Transition<DQNStates>> batch(hp.batchSize);
 		Checkpoint checkpoint("aita_dqn.pt", context);
 		GameState currentState;
 
@@ -236,7 +237,37 @@ namespace aita
 				done
 			);
 
-			// TODO: Sample from replayBuffer
+			if (replayBuffer.count() < hp.batchSize)
+			{
+				continue;
+			}
+
+			replayBuffer.randomSample(batch);
+
+			const int64_t batchSize = hp.batchSize;
+			torch::Tensor prevStateBatch = torch::empty({ batchSize, DQNStates }, torch::kFloat32);
+			torch::Tensor nextStateBatch = torch::empty({ batchSize, DQNStates }, torch::kFloat32);
+			torch::Tensor actionBatch = torch::empty({ batchSize, 1 }, torch::kInt64);
+			torch::Tensor rewardBatch = torch::empty({ batchSize }, torch::kFloat32);
+			torch::Tensor doneBatch = torch::empty({ batchSize }, torch::kBool);
+			torch::Tensor executedTimingsBatch = torch::empty({ batchSize, 2 }, torch::kFloat32);
+
+			for (int64_t i = 0; i < batchSize; ++i)
+			{
+				const Transition<DQNStates>& t = batch[i];
+
+				std::memcpy(prevStateBatch[i].data_ptr<float>(), t.state.data(), DQNStates * sizeof(float));
+				std::memcpy(nextStateBatch[i].data_ptr<float>(), t.nextState.data(), DQNStates * sizeof(float));
+
+				actionBatch[i][0] = t.action;
+				rewardBatch[i] = t.reward;
+				doneBatch[i] = t.done;
+
+				executedTimingsBatch[i][0] = t.delay;
+				executedTimingsBatch[i][1] = t.duration;
+			}
+
+			// TODO: optimize the network
 		}
 
 		saveSession(replayBuffer, checkpoint);
