@@ -361,10 +361,9 @@ namespace aita
 				executedDuration = random(FloatDist);
 			}
 
-			// Pass the explicit float values instead of the tensor
 			const GameState nextState = executeActionAndWait(actionIndex, executedDelay, executedDuration);
 
-			float reward = nextState.score - currentState.score;
+			float reward = (nextState.score - currentState.score) - KeyPressPenalty;
 			bool done = (nextState.result != Result::None);
 
 			++step;

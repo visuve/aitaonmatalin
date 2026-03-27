@@ -25,7 +25,8 @@ namespace aita
 	constexpr float WinFactor = 1.25f;
 	constexpr float LossFactor = 0.75f;
 	constexpr std::chrono::milliseconds MinKeyPressDuration = 100ms;
-	constexpr std::chrono::milliseconds MaxKeyPressDuration = DefaultEpisodeDuration;
+	constexpr std::chrono::milliseconds MaxKeyPressDuration = DefaultEpisodeDuration / 2;
+	constexpr float KeyPressPenalty = 250.0f;
 
 	class GameState
 	{
