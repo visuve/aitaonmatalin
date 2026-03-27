@@ -138,6 +138,14 @@ namespace aita
 
 		if (!ReadFile(_outputReadHandle, buffer, bufferSize - 1, &bytesRead, nullptr))
 		{
+			const DWORD error = GetLastError();
+
+			if (error == ERROR_BROKEN_PIPE)
+			{
+				LOGI("Pipe closed");
+				return {};
+			}
+
 			throw std::runtime_error("Failed to read from process output pipe.");
 		}
 
