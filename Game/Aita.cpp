@@ -162,7 +162,7 @@ namespace aita
 		sf::Vector2u resolution(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
 		sf::VideoMode videoMode(resolution, 8);
 
-		_window = sf::RenderWindow(videoMode, "Aita on matalin");
+		_window = sf::RenderWindow(videoMode, "Aita on matalin - The Fence Jump Game");
 		_window.setVerticalSyncEnabled(true);
 		_window.setFramerateLimit(Config.FramesPerSecond);
 
@@ -207,7 +207,7 @@ namespace aita
 				break;
 			}
 
-			if (_player.isMoving())
+			if (_player.isMoving() || score % Configuration::FramesPerSecond == 0)
 			{
 				std::cout << _player << std::endl;
 			}
