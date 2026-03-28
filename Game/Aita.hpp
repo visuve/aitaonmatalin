@@ -75,6 +75,7 @@ namespace aita
 		void onClose(const sf::Event::Closed& closed);
 		void onKeyPressed(const sf::Event::KeyPressed& keyPressed);
 		void onMove();
+		void draw(int32_t score);
 
 		Player _player;
 		sf::RenderWindow _window;

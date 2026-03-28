@@ -196,10 +196,7 @@ namespace aita
 
 			_player.update();
 
-			_window.clear();
-			_window.draw(_fence);
-			_window.draw(_player);
-			_window.display();
+			draw(score);
 
 			if (_player.bottomRight().x >= Config.WindowWidth &&
 				_player.bottomRight().y >= Config.WindowHeight)
@@ -262,6 +259,25 @@ namespace aita
 		{
 			_player.move({ 0.0f, Config.MoveVelocity });
 		}
+	}
+
+	void Game::draw(int32_t score)
+	{
+		const float ratio = static_cast<float>(score) / static_cast<float>(Configuration::MaxScore);
+		const uint8_t x = static_cast<uint8_t>(ratio * 0x80);
+
+		if (score <= 40 && score % 10 != 0)
+		{
+			_window.clear(sf::Color(0x80, x, x));
+		}
+		else
+		{
+			_window.clear(sf::Color(x, x, x));
+		}
+
+		_window.draw(_fence);
+		_window.draw(_player);
+		_window.display();
 	}
 
 	std::ostream& operator << (std::ostream& os, const Player& player)
