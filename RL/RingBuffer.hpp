@@ -75,22 +75,32 @@ namespace aita
 
 		friend std::ostream& operator << (std::ostream& os, const RingBuffer& buffer)
 		{
+			constexpr size_t elementSize = sizeof(T);
+			os.write(reinterpret_cast<const char*>(&elementSize), sizeof(elementSize));
 			os.write(reinterpret_cast<const char*>(&buffer._size), sizeof(buffer._size));
 			os.write(reinterpret_cast<const char*>(&buffer._index), sizeof(buffer._index));
 			os.write(reinterpret_cast<const char*>(&buffer._count), sizeof(buffer._count));
-			os.write(reinterpret_cast<const char*>(buffer._data.data()), buffer._size * sizeof(T));
+			os.write(reinterpret_cast<const char*>(buffer._data.data()), buffer._size * elementSize);
 
 			return os;
 		}
 
 		friend std::istream& operator >> (std::istream& is, RingBuffer& buffer)
 		{
-			size_t savedSize = 0;
-			is.read(reinterpret_cast<char*>(&savedSize), sizeof(savedSize));
+			size_t elementSize = 0;
+			is.read(reinterpret_cast<char*>(&elementSize), sizeof(elementSize));
 
-			if (savedSize != buffer._size)
+			if (elementSize != sizeof(T))
 			{
-				throw std::runtime_error("RingBuffer size mismatch during load");
+				throw std::runtime_error("RingBuffer element size mismatch");
+			}
+
+			size_t elementCount = 0;
+			is.read(reinterpret_cast<char*>(&elementCount), sizeof(elementCount));
+
+			if (elementCount != buffer._size)
+			{
+				throw std::runtime_error("RingBuffer element count mismatch");
 			}
 
 			is.read(reinterpret_cast<char*>(&buffer._index), sizeof(buffer._index));
