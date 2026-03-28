@@ -56,14 +56,14 @@ namespace aita
 		return distribution(engine);
 	}
 
-	template <size_t StateDim, size_t TimingDim>
+	template <size_t States, size_t Keys, size_t Timings>
 	struct Transition
 	{
-		std::array<float, StateDim> state;
-		int64_t action;
-		std::array<float, TimingDim> timings;
+		std::array<float, States> state;
+		std::bitset<Keys> action;
+		std::array<float, Timings> timings;
 		float reward;
-		std::array<float, StateDim> nextState;
+		std::array<float, States> nextState;
 		bool done;
 	};
 }

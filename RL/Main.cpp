@@ -44,8 +44,8 @@ namespace aita
 		return { state.posX, state.posY, state.velX, state.velY };
 	}
 
-	template <size_t S, size_t T>
-	void loadSession(bool trainingMode, RingBuffer<Transition<S, T>>& replayBuffer, Checkpoint& checkpoint)
+	template <size_t S, size_t K, size_t T>
+	void loadSession(bool trainingMode, RingBuffer<Transition<S, K, T>>& replayBuffer, Checkpoint& checkpoint)
 	{
 		if (checkpoint.load())
 		{
@@ -73,8 +73,8 @@ namespace aita
 		}
 	}
 
-	template <size_t S, size_t T>
-	void saveSession(const RingBuffer<Transition<S, T>>& replayBuffer, const Checkpoint& checkpoint)
+	template <size_t S, size_t K, size_t T>
+	void saveSession(const RingBuffer<Transition<S, K, T>>& replayBuffer, const Checkpoint& checkpoint)
 	{
 		if (checkpoint.save())
 		{
@@ -142,7 +142,7 @@ namespace aita
 		return true;
 	}
 
-	std::pair<int64_t, bool> decideAction(float currentEpsilon, const torch::Tensor& qValues)
+	std::pair<std::bitset<DQNKeys>, bool> decideAction(float currentEpsilon, const torch::Tensor& qValues)
 	{
 		const bool isExploration = random(FloatDist) < currentEpsilon;
 
@@ -154,7 +154,7 @@ namespace aita
 		return { qValues.argmax().item<int64_t>(), false };
 	}
 
-	GameState executeActionAndWait(int64_t actionBitmask, const std::array<float, DQNTimings>& timings)
+	GameState executeActionAndWait(std::bitset<DQNKeys> actions, const std::array<float, DQNTimings>& timings)
 	{
 		Keyboard keyboard;
 		auto maxEndTime = std::chrono::steady_clock::now();
@@ -162,7 +162,7 @@ namespace aita
 
 		for (size_t i = 0; i < DQNKeys; ++i)
 		{
-			if ((actionBitmask & (1 << i)) != 0)
+			if (actions.test(i))
 			{
 				keysPressed = true;
 				const float delayFloat = timings[i * 2];
@@ -202,19 +202,19 @@ namespace aita
 		return GlobalState;
 	}
 
-	template <size_t S, size_t T>
+	template <size_t S, size_t K, size_t T>
 	struct OptimizationContext
 	{
 		std::shared_ptr<DQN> network;
 		std::shared_ptr<DQN> targetNetwork;
 		std::shared_ptr<torch::optim::Optimizer> optimizer;
-		RingBuffer<Transition<S, T>>& replayBuffer;
-		std::vector<Transition<S, T>>& batch;
+		RingBuffer<Transition<S, K, T>>& replayBuffer;
+		std::vector<Transition<S, K, T>>& batch;
 		const HyperParameters& hp;
 	};
 
-	template <size_t S, size_t T>
-	void optimizeNetwork(OptimizationContext<S, T>& ctx)
+	template <size_t S, size_t K, size_t T>
+	void optimizeNetwork(OptimizationContext<S, K, T>& ctx)
 	{
 		if (ctx.replayBuffer.count() < ctx.hp.batchSize)
 		{
@@ -233,12 +233,12 @@ namespace aita
 
 		for (size_t i = 0; i < batchSize; ++i)
 		{
-			const Transition<S, T>& t = ctx.batch[i];
+			const Transition<S, K, T>& t = ctx.batch[i];
 
 			std::memcpy(prevStateBatch[i].data_ptr<float>(), t.state.data(), S * sizeof(float));
 			std::memcpy(nextStateBatch[i].data_ptr<float>(), t.nextState.data(), S * sizeof(float));
 
-			actionBatch[i][0] = t.action;
+			actionBatch[i][0] = static_cast<int64_t>(t.action.to_ullong());
 			rewardBatch[i] = t.reward;
 			doneBatch[i] = t.done;
 
@@ -260,13 +260,13 @@ namespace aita
 		torch::Tensor qLoss = torch::nn::functional::smooth_l1_loss(stateActionValues, expectedStateActionValues);
 
 		torch::Tensor mask = torch::zeros({ batchSize, static_cast<int64_t>(T) }, torch::kFloat32);
-		for (int64_t i = 0; i < batchSize; ++i)
+		for (size_t i = 0; i < batchSize; ++i)
 		{
-			int64_t action = actionBatch[i][0].item<int64_t>();
+			std::bitset<K> actions(static_cast<uint64_t>(actionBatch[i][0].item<int64_t>()));
 
-			for (size_t k = 0; k < DQNKeys; ++k)
+			for (size_t k = 0; k < K; ++k)
 			{
-				if ((action & (1 << k)) != 0)
+				if (actions.test(k))
 				{
 					mask[i][k * 2] = 1.0f;
 					mask[i][k * 2 + 1] = 1.0f;
@@ -343,12 +343,12 @@ namespace aita
 			}
 		};
 
-		RingBuffer<Transition<DQNStates, DQNTimings>> replayBuffer(hp.replayBufferSize);
-		std::vector<Transition<DQNStates, DQNTimings>> batch(hp.batchSize);
+		RingBuffer<Transition<DQNStates, DQNKeys, DQNTimings>> replayBuffer(hp.replayBufferSize);
+		std::vector<Transition<DQNStates, DQNKeys, DQNTimings>> batch(hp.batchSize);
 		Checkpoint checkpoint("aita_dqn.pt", context);
 		GameState currentState;
 
-		OptimizationContext<DQNStates, DQNTimings> optContext{
+		OptimizationContext<DQNStates, DQNKeys, DQNTimings> optContext{
 			network,
 			targetNetwork,
 			optimizer,
@@ -396,7 +396,7 @@ namespace aita
 
 			const GameState nextState = executeActionAndWait(actionBitmask, executedTimings);
 
-			const float penalty = KeyPressPenalty * std::popcount(static_cast<uint64_t>(actionBitmask));
+			const float penalty = KeyPressPenalty * actionBitmask.count();
 			const float reward = (nextState.score - currentState.score) - penalty;
 			const bool done = (nextState.result != Result::None);
 

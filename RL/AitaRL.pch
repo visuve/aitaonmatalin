@@ -1,6 +1,7 @@
 #include <torch/torch.h>
 
 #include <algorithm>
+#include <bitset>
 #include <chrono>
 #include <filesystem>
 #include <format>
