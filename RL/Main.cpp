@@ -66,24 +66,31 @@ namespace aita
 	}
 
 	template <size_t S, size_t T>
-	void loadSession(RingBuffer<Transition<S, T>>& replayBuffer, Checkpoint& checkpoint)
+	void loadSession(bool trainingMode, RingBuffer<Transition<S, T>>& replayBuffer, Checkpoint& checkpoint)
 	{
 		if (checkpoint.load())
 		{
 			LOGI("Checkpoint loaded");
 		}
-		else
+		else if (trainingMode)
 		{
 			LOGI("Starting new checkpoint");
 		}
-
-		if (replayBuffer.load("aita_rb.bin"))
-		{
-			LOGI("Replay buffer loaded");
-		}
 		else
 		{
-			LOGI("Starting new replay buffer");
+			throw std::runtime_error("Failed to load checkpoint. No trained weights available.");
+		}
+
+		if (trainingMode)
+		{
+			if (replayBuffer.load("aita_rb.bin"))
+			{
+				LOGI("Replay buffer loaded");
+			}
+			else
+			{
+				LOGI("Starting new replay buffer");
+			}
 		}
 	}
 
@@ -314,7 +321,7 @@ namespace aita
 		}
 	}
 
-	void run(Process& process, HyperParameters& hp)
+	void run(bool trainingMode, Process& process, HyperParameters& hp)
 	{
 		GameState::GameOverCallback = [](const GameState& state)
 		{
@@ -342,7 +349,7 @@ namespace aita
 				network->parameters(),
 				torch::optim::AdamOptions(hp.learningRate));
 
-		float currentEpsilon = hp.epsilonStart;
+		float currentEpsilon = trainingMode ? hp.epsilonStart : 0.00f;
 		int64_t step = 0;
 		int64_t episode = 0;
 
@@ -371,7 +378,7 @@ namespace aita
 			hp
 		};
 
-		loadSession(replayBuffer, checkpoint);
+		loadSession(trainingMode, replayBuffer, checkpoint);
 
 		const auto start = std::chrono::steady_clock::now();
 		const auto maximumExecTime = start + hp.timeout;
@@ -424,30 +431,35 @@ namespace aita
 				LOGI("Episode {} ended. Steps: {} | Epsilon: {:.4f} | Buffer: {}/{}",
 					episode, step, currentEpsilon, replayBuffer.count(), hp.replayBufferSize);
 
-				if (episode % 10 == 0)
+				if (trainingMode && episode % 10 == 0)
 				{
 					saveSession(replayBuffer, checkpoint);
 				}
 			}
 
-			replayBuffer.emplace(
-				toArray(currentState),
-				actionBitmask,
-				executedTimings,
-				reward,
-				toArray(nextState),
-				done
-			);
-
-			optimizeNetwork(optContext);
-
-			if (replayBuffer.count() >= hp.batchSize)
+			if (trainingMode)
 			{
-				currentEpsilon = std::max(hp.epsilonMin, currentEpsilon * hp.epsilonDecay);
+				replayBuffer.emplace(
+					toArray(currentState),
+					actionBitmask,
+					executedTimings,
+					reward,
+					toArray(nextState),
+					done);
+
+				optimizeNetwork(optContext);
+
+				if (replayBuffer.count() >= hp.batchSize)
+				{
+					currentEpsilon = std::max(hp.epsilonMin, currentEpsilon * hp.epsilonDecay);
+				}
 			}
 		}
 
-		saveSession(replayBuffer, checkpoint);
+		if (trainingMode)
+		{
+			saveSession(replayBuffer, checkpoint);
+		}
 	}
 
 	BOOL WINAPI consoleHandler(DWORD ctrlType)
@@ -493,6 +505,9 @@ int main(int argc, char** argv)
 		GlobalState.reset();
 		process.redirect(parseGameState);
 #endif
+
+		const std::string mode = arguments.get("--mode", "play");
+
 		if (arguments.contains("--example"))
 		{
 			Keyboard keyboard;
@@ -505,15 +520,27 @@ int main(int argc, char** argv)
 
 			std::this_thread::sleep_for(3s);
 		}
-		else
+		else if (mode == "play")
 		{
 			HyperParameters hp;
 			hp.parse(arguments);
-			LOGI("Hyper parameters:\n{}", hp);
-			run(process, hp);
+			LOGI("Starting in play mode");
+			run(false, process, hp);
+		}
+		else if (mode == "train")
+		{
+			HyperParameters hp;
+			hp.parse(arguments);
+			LOGI("Starting in training mode");
+			run(true, process, hp);
+		}
+		else
+		{
+			LOGE("Bad arguments");
+			return ERROR_BAD_ARGUMENTS;
 		}
 
-		process.terminate(1223); // ERROR_CANCELLED
+		process.terminate(ERROR_CANCELLED);
 		process.waitForExit();
 
 	}
