@@ -97,14 +97,21 @@ namespace aita
 			{
 				while (isRunning())
 				{
-					std::string output = read();
+					const std::optional<std::string> output = read();
 
-					if (output.empty())
+					if (!output.has_value())
+					{
+						break;
+					}
+
+					const std::string value = output.value();
+
+					if (value.empty())
 					{
 						continue;
 					}
 
-					how(output);
+					how(value);
 				}
 
 				LOGI("Process exited with code: {}", exitCode());
@@ -129,7 +136,7 @@ namespace aita
 		return redirect(how);
 	}
 
-	std::string Process::read()
+	std::optional<std::string> Process::read()
 	{
 		constexpr size_t bufferSize = 0x1000;
 		thread_local char buffer[bufferSize];
@@ -143,7 +150,7 @@ namespace aita
 			if (error == ERROR_BROKEN_PIPE)
 			{
 				LOGI("Pipe closed");
-				return {};
+				return std::nullopt;
 			}
 
 			throw std::runtime_error("Failed to read from process output pipe.");

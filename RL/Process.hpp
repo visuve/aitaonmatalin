@@ -11,7 +11,7 @@ namespace aita
 		void start();
 		void redirect(std::function<void(std::string_view)> how);
 		void redirectTo(void* where);
-		std::string read();
+		std::optional<std::string> read();
 		bool isRunning() const;
 		void terminate(int) const;
 		int exitCode() const;
