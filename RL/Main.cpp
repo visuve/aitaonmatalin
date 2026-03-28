@@ -428,14 +428,19 @@ namespace aita
 			{
 				++episode;
 
-				LOGI("Episode {} ended. Result: {} | Score: {:.2f} | Steps: {} | Epsilon: {:.4f} | Buffer: {}/{}",
+				const auto now = std::chrono::steady_clock::now();
+				const auto remaining = std::max(std::chrono::seconds(0),
+					std::chrono::duration_cast<std::chrono::seconds>(maximumExecTime - now));
+
+				LOGI("Episode {} ended. Result: {} | Score: {:.2f} | Steps: {} | Epsilon: {:.4f} | Buffer: {}/{} | Time Left: {:%T}",
 					episode,
 					(nextState.result == Result::Won ? "Won" : "Lost"),
 					reward,
 					tick,
 					epsilon,
 					replayBuffer.count(),
-					hp.replayBufferSize);
+					hp.replayBufferSize,
+					remaining);
 
 				tick = 0;
 
