@@ -2,6 +2,12 @@
 
 namespace aita
 {
+	template <typename T>
+	concept IsDuration = requires { typename T::rep; typename T::period; };
+
+	template <typename T>
+	concept IsArithmetic = std::is_arithmetic_v<T>;
+
 	class Arguments
 	{
 	public:
@@ -11,7 +17,7 @@ namespace aita
 		{
 		}
 
-		template <typename T>
+		template <IsArithmetic T>
 		T get(std::string_view flag, T defaultValue) const
 		{
 			const std::string value = find(flag);
@@ -51,12 +57,25 @@ namespace aita
 				return std::stod(value);
 			}
 
-			if constexpr (std::is_same_v<T, std::chrono::seconds>)
+			static_assert("Unsupported type");
+		}
+
+		template <IsDuration T>
+		T get(std::string_view flag, T defaultValue) const
+		{
+			return T(get<typename T::rep>(flag, defaultValue.count()));
+		}
+
+		std::string get(std::string_view flag, const std::string& defaultValue) const
+		{
+			const std::string value = find(flag);
+
+			if (value == "not found")
 			{
-				return std::chrono::seconds(std::stoll(value));
+				return defaultValue;
 			}
 
-			static_assert("Unsupported type");
+			return value;
 		}
 
 		inline bool contains(const std::string_view key) const
