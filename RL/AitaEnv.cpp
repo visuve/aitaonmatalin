@@ -57,24 +57,25 @@ namespace aita
 		}
 	}
 
-	float GameState::calculateScore(const GameState& state, std::chrono::steady_clock::time_point start)
+	float GameState::calculateStepReward(const GameState& current, const GameState& next, float actions)
 	{
-		const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
-		const float base = std::clamp(MaxScore - (float)elapsed, MinScore, MaxScore);
-		const float progress = std::clamp(state.posX / WindowWidth, 0.0f, 1.0f) * ProgressReinforcementScore;
-		float total = base + progress;
+		const float deltaRatio = (next.posX - current.posX) / (float)WindowWidth;
+		const float progress = (deltaRatio > 0.0f) ? (deltaRatio * ProgressWeight) : -1.0f;
+		return progress - (actions * KeyPressPenalty);
+	}
 
-		switch (state.result)
+	float GameState::calculateEpisodeReward(const GameState& state, int32_t totalSteps)
+	{
+		const float progressRatio = std::clamp(state.posX / (float)WindowWidth, 0.0f, 1.0f);
+		const float baseScore = progressRatio * ProgressWeight;
+
+		if (state.result == Result::Won)
 		{
-			case Result::Won:
-				total *= WinFactor;
-				break;
-			case Result::Lost:
-				total *= LossFactor;
-				break;
+			const float efficiency = std::max(0, MaxEpisodeSteps - totalSteps) * 2.0f;
+			return (baseScore + GoalBonus + efficiency) * 2.0f;
 		}
 
-		return std::clamp(total, MinScore, MaxScore);
+		return baseScore;
 	}
 
 	void HyperParameters::parse(const Arguments& arguments)

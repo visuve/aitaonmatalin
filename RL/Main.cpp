@@ -32,7 +32,7 @@ namespace aita
 	std::condition_variable Condition;
 	uint64_t Sequence = 0;
 	std::atomic<bool> KeepRunning = true;
-	GameState GlobalState;
+	GameState State;
 
 	torch::Tensor toTensor(const GameState& state)
 	{
@@ -97,37 +97,30 @@ namespace aita
 
 	void parseGameState(std::string_view processOutput)
 	{
-		GameState localState;
+		std::lock_guard<std::mutex> lock(Mutex);
 
 		try
 		{
-			localState.parse(processOutput);
+			State.parse(processOutput);
 		}
 		catch (const std::exception& e)
 		{
 			LOGE("Failed to parse game state from process output: {}. Exception {}", processOutput, e.what());
 			return;
 		}
-
-		{
-			std::lock_guard<std::mutex> lock(Mutex);
-			GlobalState = localState;
-			++Sequence;
-		}
-
+		
+		++Sequence;
 		Condition.notify_all();
 	}
 
 	bool observeState(GameState& state)
 	{
 		std::unique_lock<std::mutex> lock(Mutex);
-
 		const uint64_t currentSequence = Sequence;
 
 		LOGD("Observing...");
 
-		if (!Condition.wait_for(lock, DefaultEpisodeTimeout,
-			[&] { return Sequence != currentSequence && GlobalState.result == Result::None; }))
+		if (!Condition.wait_for(lock, DefaultEpisodeTimeout, [&] { return Sequence != currentSequence; }))
 		{
 			LOGW("Timeout waiting for game state.");
 			return false;
@@ -138,7 +131,7 @@ namespace aita
 			return false;
 		}
 
-		state = GlobalState;
+		state = State;
 		return true;
 	}
 
@@ -196,10 +189,10 @@ namespace aita
 		std::unique_lock<std::mutex> lock(Mutex);
 		Condition.wait_until(lock, maxEndTime, []
 		{
-			return !KeepRunning || GlobalState.result != Result::None;
+			return !KeepRunning || State.result != Result::None;
 		});
 
-		return GlobalState;
+		return State;
 	}
 
 	template <size_t S, size_t K, size_t T>
@@ -320,7 +313,7 @@ namespace aita
 				network->parameters(),
 				torch::optim::AdamOptions(hp.learningRate));
 
-		float currentEpsilon = trainingMode ? hp.epsilonStart : 0.00f;
+		float epsilon = trainingMode ? hp.epsilonStart : 0.00f;
 		int64_t step = 0;
 		int64_t episode = 0;
 
@@ -329,7 +322,7 @@ namespace aita
 			network,
 			optimizer,
 			{
-				{ "epsilon", &currentEpsilon },
+				{ "epsilon", &epsilon },
 				{ "step", &step },
 				{ "episode", &episode }
 			}
@@ -358,7 +351,7 @@ namespace aita
 			return std::chrono::steady_clock::now() < maximumExecTime;
 		};
 
-		auto episodeStart = start;
+		int32_t tick = 0;
 
 		while (KeepRunning && timeLeft())
 		{
@@ -367,36 +360,64 @@ namespace aita
 				continue;
 			}
 
-			const float currentScore = GameState::calculateScore(currentState, episodeStart);
-			const torch::Tensor stateTensor = toTensor(currentState);
-			const auto [qValues, timings] = network->forward(stateTensor);
-			const auto [actionBitmask, isExploration] = decideAction(currentEpsilon, qValues);
+			bool done = (currentState.result != Result::None);
+			float reward = 0.0f;
+			GameState nextState = currentState;
 
-			std::array<float, DQNTimings> executedTimings;
-
-			for (size_t i = 0; i < DQNKeys; ++i)
+			if (done)
 			{
-				if (isExploration)
+				reward = GameState::calculateEpisodeReward(currentState, tick);
+			}
+			else
+			{
+				const torch::Tensor stateTensor = toTensor(currentState);
+				const auto [qValues, timings] = network->forward(stateTensor);
+				const auto [actionBitmask, isExploration] = decideAction(epsilon, qValues);
+
+				std::array<float, DQNTimings> executedTimings;
+
+				for (size_t i = 0; i < DQNKeys; ++i)
 				{
-					executedTimings[i * 2] = random(FloatDist);
-					executedTimings[i * 2 + 1] = random(FloatDist);
+					if (isExploration)
+					{
+						executedTimings[i * 2] = random(FloatDist);
+						executedTimings[i * 2 + 1] = random(FloatDist);
+					}
+					else
+					{
+						executedTimings[i * 2] = timings[i * 2].item<float>();
+						executedTimings[i * 2 + 1] = timings[i * 2 + 1].item<float>();
+					}
 				}
-				else
+
+				nextState = executeActionAndWait(actionBitmask, executedTimings);
+				done = (nextState.result != Result::None);
+
+				++step;
+				++tick;
+
+				reward = done ?
+					GameState::calculateEpisodeReward(nextState, tick) :
+					GameState::calculateStepReward(currentState, nextState, actionBitmask.count());
+
+				if (trainingMode)
 				{
-					executedTimings[i * 2] = timings[i * 2].item<float>();
-					executedTimings[i * 2 + 1] = timings[i * 2 + 1].item<float>();
+					replayBuffer.emplace(
+						toArray(currentState),
+						actionBitmask,
+						executedTimings,
+						reward,
+						toArray(nextState),
+						done);
+
+					optimizeNetwork(optContext);
+
+					if (replayBuffer.count() >= hp.batchSize)
+					{
+						epsilon = std::max(hp.epsilonMin, epsilon * hp.epsilonDecay);
+					}
 				}
 			}
-
-			GameState nextState = executeActionAndWait(actionBitmask, executedTimings);
-			const float nextScore = GameState::calculateScore(nextState, episodeStart);
-			const float penalty = KeyPressPenalty * actionBitmask.count();
-			const float reward = (nextScore - currentScore) - penalty;
-			const bool done = (nextState.result != Result::None);
-
-			LOGI("Step {}, Penalty: {:.2f}, Reward: {:.2f}", step, penalty, reward);
-
-			++step;
 
 			if (done)
 			{
@@ -405,41 +426,31 @@ namespace aita
 				LOGI("Episode {} ended. Result: {} | Score: {:.2f} | Steps: {} | Epsilon: {:.4f} | Buffer: {}/{}",
 					episode,
 					(nextState.result == Result::Won ? "Won" : "Lost"),
-					nextScore,
-					step,
-					currentEpsilon,
+					reward,
+					tick,
+					epsilon,
 					replayBuffer.count(),
 					hp.replayBufferSize);
+
+				tick = 0;
+
+				{
+					std::lock_guard<std::mutex> lock(Mutex);
+					State.reset();
+				}
 
 				if (trainingMode && episode % 10 == 0)
 				{
 					saveSession(replayBuffer, checkpoint);
 				}
-
-				episodeStart = std::chrono::steady_clock::now();
-
-				{
-					std::lock_guard<std::mutex> lock(Mutex);
-					GlobalState.reset();
-				}
 			}
-
-			if (trainingMode)
+			else
 			{
-				replayBuffer.emplace(
-					toArray(currentState),
-					actionBitmask,
-					executedTimings,
-					reward,
-					toArray(nextState),
-					done);
-
-				optimizeNetwork(optContext);
-
-				if (replayBuffer.count() >= hp.batchSize)
-				{
-					currentEpsilon = std::max(hp.epsilonMin, currentEpsilon * hp.epsilonDecay);
-				}
+				LOGI("Step {} | X: {:.2f} | Y: {:.2f} | Reward: {:.2f}",
+					step,
+					nextState.posX,
+					nextState.posY,
+					reward);
 			}
 		}
 
@@ -489,7 +500,6 @@ int main(int argc, char** argv)
 
 #ifdef WIN32
 		ensureForegroundWindow(L"Aita on matalin - The Fence Jump Game");
-		GlobalState.reset();
 		process.redirect(parseGameState);
 #endif
 

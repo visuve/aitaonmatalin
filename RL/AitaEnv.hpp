@@ -21,12 +21,13 @@ namespace aita
 	constexpr float StartingPosY = 520.0f; // With screen resolution 640x480 this is the start value
 	constexpr float MaxScore = std::chrono::duration_cast<std::chrono::milliseconds>(DefaultEpisodeDuration).count();
 	constexpr float MinScore = 0.0f;
-	constexpr float ProgressReinforcementScore = 1000.0f;
-	constexpr float WinFactor = 1.25f;
-	constexpr float LossFactor = 0.75f;
 	constexpr std::chrono::milliseconds MinKeyPressDuration = 100ms;
 	constexpr std::chrono::milliseconds MaxKeyPressDuration = DefaultEpisodeDuration / 2;
-	constexpr float KeyPressPenalty = 50.0f;
+
+	constexpr int32_t MaxEpisodeSteps = 600;
+	constexpr float ProgressWeight = 1000.0f;
+	constexpr float GoalBonus = 1000.0f;
+	constexpr float KeyPressPenalty = 5.0f;
 
 	class GameState
 	{
@@ -41,7 +42,8 @@ namespace aita
 		void reset();
 		void parse(std::string_view line);
 
-		static float calculateScore(const GameState& state, std::chrono::steady_clock::time_point start);
+		static float calculateStepReward(const GameState& current, const GameState& next, float actions);
+		static float calculateEpisodeReward(const GameState& state, int32_t steps);
 	};
 
 	constexpr uint64_t DQNStates = 4; // posX, posY, velX, velY
