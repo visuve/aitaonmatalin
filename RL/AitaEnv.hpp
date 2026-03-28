@@ -56,7 +56,7 @@ namespace aita
 	constexpr float DefaultEpsilonStart = 1.0f;
 	constexpr float DefaultEpsilonMin = 0.05f;
 	constexpr float DefaultEpsilonDecay = 0.0005f;
-	constexpr uint32_t DefaultBatchSize = 64;
+	constexpr uint32_t DefaultBatchSize = 128;
 	constexpr float DefaultGamma = 0.99f;
 	constexpr float DefaultLearningRate = 0.0001f;
 
