@@ -36,7 +36,12 @@ namespace aita
 
 	torch::Tensor toTensor(const GameState& state)
 	{
-		return torch::tensor({ state.posX, state.posY, state.velX, state.velY });
+		return torch::tensor({
+			state.posX / static_cast<float>(WindowWidth),
+			state.posY / static_cast<float>(WindowHeight),
+			state.velX / 5.0f, // 4 and -12.8 would be correct but add some breathing room
+			state.velY / 15.0f
+		});
 	}
 
 	std::array<float, DQNStates> toArray(const GameState& state)
