@@ -3,6 +3,8 @@
 
 namespace aita
 {
+	constexpr char KeyChars[] = { 'L', 'R', 'J' };
+
 	Key keyFromIndex(int64_t index)
 	{
 		switch (index)
@@ -16,21 +18,6 @@ namespace aita
 		}
 
 		throw std::invalid_argument("Invalid index");
-	}
-
-	std::string_view toString(Key key)
-	{
-		switch (key)
-		{
-			case Key::Left:
-				return "Left";
-			case Key::Right:
-				return "Right";
-			case Key::Jump:
-				return "Jump";
-		}
-
-		throw std::invalid_argument("Invalid Key");
 	}
 
 #ifdef WIN32
@@ -55,11 +42,10 @@ namespace aita
 #endif
 
 	KeyPress::KeyPress(Key key, std::chrono::milliseconds from, std::chrono::milliseconds to) :
-		_key(key),
-		_from(from),
-		_to(to)
+		key(key),
+		from(from),
+		to(to)
 	{
-		LOGD("{} {} {}", toString(key), from, to);
 	}
 
 	void KeyPress::execute(std::stop_source stop_source, std::chrono::steady_clock::time_point startTime)
@@ -67,8 +53,8 @@ namespace aita
 		std::stop_token token = stop_source.get_token();
 
 		const auto offset = std::chrono::steady_clock::now() - startTime;
-		const auto delay = _from - offset;
-		const auto duration = _to - _from;
+		const auto delay = from - offset;
+		const auto duration = to - from;
 
 		const auto wait = [&](std::chrono::nanoseconds waitTime)
 		{
@@ -90,21 +76,21 @@ namespace aita
 		};
 
 #ifdef WIN32
-	 	const BYTE key = toVirtualKey(_key);
-		const UINT scan = static_cast<BYTE>(MapVirtualKeyW(key, MAPVK_VK_TO_VSC));
+	 	const BYTE virtualKey = toVirtualKey(key);
+		const UINT scan = static_cast<BYTE>(MapVirtualKeyW(virtualKey, MAPVK_VK_TO_VSC));
 
 		if (!wait(delay))
 		{
 			return;
 		}
 
-		keybd_event(key, scan, KeyDown | KeyExtended, 0);
+		keybd_event(virtualKey, scan, KeyDown | KeyExtended, 0);
 
 		wait(duration);
 
-		keybd_event(key, scan, KeyUp | KeyExtended, 0);
+		keybd_event(virtualKey, scan, KeyUp | KeyExtended, 0);
 		
-		LOGD("{} executed", toString(_key));
+		LOGD("({}, {}, {}) executed", KeyChars[static_cast<size_t>(key)], from, to);
 #endif
 	}
 
@@ -121,12 +107,22 @@ namespace aita
 
 	void Keyboard::sendKeys()
 	{
+		std::string message;
 		auto startTime = std::chrono::steady_clock::now();
 
-		for (KeyPress& key : _keys)
+		for (KeyPress& kp : _keys)
 		{
-			_threads.emplace_back(&KeyPress::execute, &key, _stopSource, startTime);
+			if (!message.empty())
+			{
+				message += ", ";
+			}
+
+			message += std::format("({}, {}, {})", KeyChars[static_cast<size_t>(kp.key)], kp.from, kp.to);
+
+			_threads.emplace_back(&KeyPress::execute, &kp, _stopSource, startTime);
 		}
+
+		LOGI("Executing: {}", message.empty() ? "None" : message);
 	}
 
 	void Keyboard::wait()

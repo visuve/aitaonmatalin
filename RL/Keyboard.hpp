@@ -10,17 +10,16 @@ namespace aita
 	};
 
 	Key keyFromIndex(int64_t index);
-	std::string_view toString(Key key);
 
 	class KeyPress
 	{
 	public:
 		KeyPress(Key key, std::chrono::milliseconds from, std::chrono::milliseconds to);
 		void execute(std::stop_source stop_source, std::chrono::steady_clock::time_point startTime);
-	private:
-		Key _key;
-		std::chrono::milliseconds _from;
-		std::chrono::milliseconds _to;
+
+		const Key key;
+		const std::chrono::milliseconds from;
+		const std::chrono::milliseconds to;
 	};
 
 	class Keyboard

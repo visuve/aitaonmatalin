@@ -44,27 +44,6 @@ namespace aita
 		return { state.posX, state.posY, state.velX, state.velY };
 	}
 
-	std::string actionToString(int64_t bitmask)
-	{
-		static const std::array<std::string, 8> ActionStrings = {
-			"None",
-			"Left",
-			"Right",
-			"Left + Right",
-			"Jump",
-			"Left + Jump",
-			"Right + Jump",
-			"Left + Right + Jump"
-		};
-
-		if (bitmask >= 0 && bitmask < ActionStrings.size())
-		{
-			return ActionStrings[bitmask];
-		}
-
-		return "Unknown";
-	}
-
 	template <size_t S, size_t T>
 	void loadSession(bool trainingMode, RingBuffer<Transition<S, T>>& replayBuffer, Checkpoint& checkpoint)
 	{
@@ -211,7 +190,7 @@ namespace aita
 		}
 		else
 		{
-			maxEndTime = std::chrono::steady_clock::now() + 100ms;
+			maxEndTime = std::chrono::steady_clock::now() + MinKeyPressDuration;
 		}
 
 		std::unique_lock<std::mutex> lock(Mutex);
@@ -415,12 +394,13 @@ namespace aita
 				}
 			}
 
-			LOGD("Step {}: Action [{}] chosen", step, actionToString(actionBitmask));
-
 			const GameState nextState = executeActionAndWait(actionBitmask, executedTimings);
 
-			float reward = (nextState.score - currentState.score) - KeyPressPenalty;
-			bool done = (nextState.result != Result::None);
+			const float penalty = KeyPressPenalty * std::popcount(static_cast<uint64_t>(actionBitmask));
+			const float reward = (nextState.score - currentState.score) - penalty;
+			const bool done = (nextState.result != Result::None);
+
+			LOGI("Step {}, Penalty: {:.2f}, Reward, {:.2f}", step, penalty, reward);
 
 			++step;
 
@@ -428,8 +408,8 @@ namespace aita
 			{
 				++episode;
 
-				LOGI("Episode {} ended. Steps: {} | Epsilon: {:.4f} | Buffer: {}/{}",
-					episode, step, currentEpsilon, replayBuffer.count(), hp.replayBufferSize);
+				LOGI("Episode {} ended. Score: {:.2f} | Steps: {} | Epsilon: {:.4f} | Buffer: {}/{}",
+					episode, nextState.score, step, currentEpsilon, replayBuffer.count(), hp.replayBufferSize);
 
 				if (trainingMode && episode % 10 == 0)
 				{

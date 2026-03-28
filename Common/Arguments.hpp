@@ -56,8 +56,6 @@ namespace aita
 			{
 				return std::stod(value);
 			}
-
-			static_assert("Unsupported type");
 		}
 
 		template <IsDuration T>
