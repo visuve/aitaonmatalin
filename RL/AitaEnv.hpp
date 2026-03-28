@@ -55,7 +55,7 @@ namespace aita
 	constexpr uint32_t DefaultReplayBufferSize = 10000;
 	constexpr float DefaultEpsilonStart = 1.0f;
 	constexpr float DefaultEpsilonMin = 0.05f;
-	constexpr float DefaultEpsilonDecay = 0.0005f;
+	constexpr float DefaultEpsilonDecay = 0.0004f;
 	constexpr uint32_t DefaultBatchSize = 128;
 	constexpr float DefaultGamma = 0.99f;
 	constexpr float DefaultLearningRate = 0.0001f;

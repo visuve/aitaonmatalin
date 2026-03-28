@@ -3,8 +3,8 @@
 
 namespace aita
 {
-	constexpr std::string_view WonMarker = "won\r\n";
-	constexpr std::string_view LostMarker = "lost\r\n";
+	constexpr std::string_view WonMarker = "won";
+	constexpr std::string_view LostMarker = "lost";
 
 	void GameState::reset()
 	{
@@ -33,6 +33,11 @@ namespace aita
 		{
 			result = Result::Won;
 			return;
+		}
+
+		if (result != Result::None)
+		{
+			return; // A reset is pending
 		}
 		
 		const std::array<float*, 4> targets = { &posX, &posY, &velX, &velY };
@@ -64,14 +69,14 @@ namespace aita
 		return progress - (actions * KeyPressPenalty);
 	}
 
-	float GameState::calculateEpisodeReward(const GameState& state, int32_t totalSteps)
+	float GameState::calculateEpisodeReward(const GameState& state, int32_t steps)
 	{
 		const float progressRatio = std::clamp(state.posX / (float)WindowWidth, 0.0f, 1.0f);
 		const float baseScore = progressRatio * ProgressWeight;
 
 		if (state.result == Result::Won)
 		{
-			const float efficiency = std::max(0, MaxEpisodeSteps - totalSteps) * 2.0f;
+			const float efficiency = std::max(0, MaxEpisodeSteps - steps) * 2.0f;
 			return (baseScore + GoalBonus + efficiency) * 2.0f;
 		}
 
