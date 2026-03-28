@@ -419,7 +419,7 @@ namespace aita
 
 					if (replayBuffer.count() >= hp.batchSize)
 					{
-						epsilon = std::max(hp.epsilonMin, epsilon * hp.epsilonDecay);
+						epsilon = std::max(hp.epsilonMin, epsilon - hp.epsilonDecay);
 					}
 				}
 			}
