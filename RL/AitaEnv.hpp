@@ -26,28 +26,22 @@ namespace aita
 	constexpr float LossFactor = 0.75f;
 	constexpr std::chrono::milliseconds MinKeyPressDuration = 100ms;
 	constexpr std::chrono::milliseconds MaxKeyPressDuration = DefaultEpisodeDuration / 2;
-	constexpr float KeyPressPenalty = 250.0f;
+	constexpr float KeyPressPenalty = 50.0f;
 
 	class GameState
 	{
 	public:
-		GameState();
-		std::chrono::steady_clock::time_point start;
-		float posX;
-		float posY;
-		float velX;
-		float velY;
-		std::chrono::milliseconds time;
-		float score;
-		Result result;
+		GameState() = default;
+		float posX = StartingPosX;
+		float posY = StartingPosY;
+		float velX = 0.0f;
+		float velY = 0.0f;
+		Result result = Result::None;
 
 		void reset();
 		void parse(std::string_view line);
 
-		static std::function<void(const GameState&)> GameOverCallback;
-
-	private:
-		void calculateScore();
+		static float calculateScore(const GameState& state, std::chrono::steady_clock::time_point start);
 	};
 
 	constexpr uint64_t DQNStates = 4; // posX, posY, velX, velY
@@ -70,7 +64,7 @@ namespace aita
 	class HyperParameters
 	{
 	public:
-		std::chrono::seconds timeout = DefaultTimeout;      // Maximum execution time
+		std::chrono::seconds timeout = DefaultTimeout; // Maximum execution time
 		uint32_t replayBufferSize = DefaultReplayBufferSize; // Maximum number of transitions to store in memory (not bytes)
 		float epsilonStart = DefaultEpsilonStart;
 		float epsilonMin = DefaultEpsilonMin;
@@ -93,12 +87,11 @@ struct std::formatter<aita::GameState>
 
 	auto format(const aita::GameState& gs, std::format_context& ctx) const
 	{
-		return std::format_to(ctx.out(), "{} {} {} {} {}",
+		return std::format_to(ctx.out(), "{} {} {} {}",
 			gs.posX,
 			gs.posY,
 			gs.velX,
-			gs.velY,
-			gs.score);
+			gs.velY);
 	}
 };
 

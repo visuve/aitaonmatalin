@@ -3,25 +3,17 @@
 
 namespace aita
 {
-	GameState::GameState()
-	{
-		reset();
-	}
+	constexpr std::string_view WonMarker = "won\r\n";
+	constexpr std::string_view LostMarker = "lost\r\n";
 
 	void GameState::reset()
 	{
-		start = std::chrono::steady_clock::now();
 		posX = StartingPosX;
 		posY = StartingPosY;
 		velX = 0.0f;
 		velY = 0.0f;
-		time = std::chrono::milliseconds(0);
-		score = MaxScore;
 		result = Result::None;
 	}
-
-	constexpr std::string_view WonMarker = "won\r\n";
-	constexpr std::string_view LostMarker = "lost\r\n";
 
 	void GameState::parse(std::string_view line)
 	{
@@ -34,18 +26,14 @@ namespace aita
 		if (line.starts_with(LostMarker))
 		{
 			result = Result::Lost;
-			line.remove_prefix(LostMarker.size());
-			return parse(line);
+			return;
 		}
 
 		if (line.starts_with(WonMarker))
 		{
 			result = Result::Won;
-			line.remove_prefix(WonMarker.size());
-			return parse(line);
+			return;
 		}
-
-		calculateScore();
 		
 		const std::array<float*, 4> targets = { &posX, &posY, &velX, &velY };
 		const char* iter = line.data();
@@ -69,34 +57,25 @@ namespace aita
 		}
 	}
 
-	void GameState::calculateScore()
+	float GameState::calculateScore(const GameState& state, std::chrono::steady_clock::time_point start)
 	{
-		const auto diff = std::chrono::steady_clock::now() - start;
-		time = std::chrono::duration_cast<std::chrono::milliseconds>(diff);
-		
-		const float base = std::clamp(MaxScore - time.count(), MinScore, MaxScore);
-		const float progess = std::clamp(posX / WindowWidth, 0.0f, 1.0f) * ProgressReinforcementScore;
-		float total = base + progess;
+		const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+		const float base = std::clamp(MaxScore - (float)elapsed, MinScore, MaxScore);
+		const float progress = std::clamp(state.posX / WindowWidth, 0.0f, 1.0f) * ProgressReinforcementScore;
+		float total = base + progress;
 
-		if (result == Result::Won)
+		switch (state.result)
 		{
-			total *= WinFactor;
-		}
-		else if (result == Result::Lost)
-		{
-			total *= LossFactor;
+			case Result::Won:
+				total *= WinFactor;
+				break;
+			case Result::Lost:
+				total *= LossFactor;
+				break;
 		}
 
-		score = std::clamp(total, MinScore, MaxScore);
-		
-		if (result != Result::None && GameOverCallback)
-		{
-			GameOverCallback(*this);
-			reset();
-		}
+		return std::clamp(total, MinScore, MaxScore);
 	}
-
-	std::function<void(const GameState&)> GameState::GameOverCallback = nullptr;
 
 	void HyperParameters::parse(const Arguments& arguments)
 	{

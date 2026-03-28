@@ -302,14 +302,6 @@ namespace aita
 
 	void run(bool trainingMode, Process& process, HyperParameters& hp)
 	{
-		GameState::GameOverCallback = [](const GameState& state)
-		{
-			LOGI("Game over! Final score: {} Time: {:.3f} Result: {}",
-				state.score,
-				state.time.count() / 1000.0f,
-				state.result == Result::Won ? "Won" : "Lost");
-		};
-
 		auto network = std::make_shared<DQN>(DQNStates, DQNActions, DQNTimings);
 		auto targetNetwork = std::make_shared<DQN>(DQNStates, DQNActions, DQNTimings);
 
@@ -366,6 +358,8 @@ namespace aita
 			return std::chrono::steady_clock::now() < maximumExecTime;
 		};
 
+		auto episodeStart = start;
+
 		while (KeepRunning && timeLeft())
 		{
 			if (!observeState(currentState))
@@ -373,9 +367,9 @@ namespace aita
 				continue;
 			}
 
+			const float currentScore = GameState::calculateScore(currentState, episodeStart);
 			const torch::Tensor stateTensor = toTensor(currentState);
 			const auto [qValues, timings] = network->forward(stateTensor);
-
 			const auto [actionBitmask, isExploration] = decideAction(currentEpsilon, qValues);
 
 			std::array<float, DQNTimings> executedTimings;
@@ -394,13 +388,13 @@ namespace aita
 				}
 			}
 
-			const GameState nextState = executeActionAndWait(actionBitmask, executedTimings);
-
+			GameState nextState = executeActionAndWait(actionBitmask, executedTimings);
+			const float nextScore = GameState::calculateScore(nextState, episodeStart);
 			const float penalty = KeyPressPenalty * actionBitmask.count();
-			const float reward = (nextState.score - currentState.score) - penalty;
+			const float reward = (nextScore - currentScore) - penalty;
 			const bool done = (nextState.result != Result::None);
 
-			LOGI("Step {}, Penalty: {:.2f}, Reward, {:.2f}", step, penalty, reward);
+			LOGI("Step {}, Penalty: {:.2f}, Reward: {:.2f}", step, penalty, reward);
 
 			++step;
 
@@ -408,12 +402,25 @@ namespace aita
 			{
 				++episode;
 
-				LOGI("Episode {} ended. Score: {:.2f} | Steps: {} | Epsilon: {:.4f} | Buffer: {}/{}",
-					episode, nextState.score, step, currentEpsilon, replayBuffer.count(), hp.replayBufferSize);
+				LOGI("Episode {} ended. Result: {} | Score: {:.2f} | Steps: {} | Epsilon: {:.4f} | Buffer: {}/{}",
+					episode,
+					(nextState.result == Result::Won ? "Won" : "Lost"),
+					nextScore,
+					step,
+					currentEpsilon,
+					replayBuffer.count(),
+					hp.replayBufferSize);
 
 				if (trainingMode && episode % 10 == 0)
 				{
 					saveSession(replayBuffer, checkpoint);
+				}
+
+				episodeStart = std::chrono::steady_clock::now();
+
+				{
+					std::lock_guard<std::mutex> lock(Mutex);
+					GlobalState.reset();
 				}
 			}
 
