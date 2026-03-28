@@ -185,7 +185,7 @@ namespace aita
 				const float scaledDuration = MinKeyPressDuration.count() +
 					(durationFloat * (MaxKeyPressDuration.count() - MinKeyPressDuration.count()));
 
-				const auto delayTime = std::chrono::milliseconds(static_cast<int>(delayFloat * 1000.0f));
+				const auto delayTime = std::chrono::milliseconds(static_cast<int>(delayFloat * MaxKeyPressDuration.count()));
 				const auto durationTime = std::chrono::milliseconds(static_cast<int>(scaledDuration));
 				const auto endTime = std::chrono::steady_clock::now() + delayTime + durationTime;
 
