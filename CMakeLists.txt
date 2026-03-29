@@ -10,5 +10,7 @@ option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 set(EXECUTABLE_OUTPUT_PATH "..")
 set(LIBRARY_OUTPUT_PATH "..")
 
-add_subdirectory("Game")
+include(FetchContent)
+
+#add_subdirectory("Game")
 add_subdirectory("RL")

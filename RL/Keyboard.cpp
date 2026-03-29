@@ -29,16 +29,93 @@ namespace aita
 	{
 		switch (key)
 		{
-		case Key::Left:
-			return VK_LEFT;
-		case Key::Right:
-			return VK_RIGHT;
-		case Key::Jump:
-			return VK_SPACE;
+		case Key::Left: return VK_LEFT;
+		case Key::Right: return VK_RIGHT;
+		case Key::Jump: return VK_SPACE;
 		}
 
 		throw std::invalid_argument("Invalid key");
 	}
+#else
+	uint16_t KeyDown = 1;
+	uint16_t KeyUp = 0;
+
+	uint16_t toEvdevCode(Key key)
+	{
+		switch (key)
+		{
+			case Key::Left: return KEY_LEFT;
+			case Key::Right: return KEY_RIGHT;
+			case Key::Jump: return KEY_SPACE;
+		}
+
+		throw std::invalid_argument("Invalid key");
+	}
+
+	class VirtualInputDevice
+	{
+	public:
+		static VirtualInputDevice& instance()
+		{
+			static VirtualInputDevice instance;
+			return instance;
+		}
+
+		void sendEvent(uint16_t type, uint16_t code, int32_t val) const
+		{
+			struct input_event ie = {};
+			ie.type = type;
+			ie.code = code;
+			ie.value = val;
+			gettimeofday(&ie.time, nullptr);
+
+			if (write(_fd, &ie, sizeof(ie)) < 0)
+			{
+				LOGW("Failed to send event: type={}, code={}", type, code);
+			}
+		}
+
+	private:
+		int _fd = -1;
+
+		VirtualInputDevice() :
+			_fd(open("/dev/uinput", O_WRONLY | O_NONBLOCK))
+		{
+			if (_fd < 0)
+			{
+				throw std::runtime_error("Failed to open /dev/uinput. Check permissions.");
+			}
+
+			ioctl(_fd, UI_SET_EVBIT, EV_KEY);
+			ioctl(_fd, UI_SET_KEYBIT, KEY_LEFT);
+			ioctl(_fd, UI_SET_KEYBIT, KEY_RIGHT);
+			ioctl(_fd, UI_SET_KEYBIT, KEY_SPACE);
+
+			struct uinput_setup usetup = {};
+			usetup.id.bustype = BUS_VIRTUAL;
+			usetup.id.vendor = 0x1D6B; // Linux Foundation
+			usetup.id.product = 0x0104; // Custom/Generic Software Input
+			usetup.id.version = 1;
+			strcpy(usetup.name, "aita_virtual_keyboard");
+
+			ioctl(_fd, UI_DEV_SETUP, &usetup);
+			ioctl(_fd, UI_DEV_CREATE);
+
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+		}
+
+		~VirtualInputDevice()
+		{
+			if (_fd >= 0)
+			{
+				ioctl(_fd, UI_DEV_DESTROY);
+				close(_fd);
+			}
+		}
+
+		VirtualInputDevice(const VirtualInputDevice&) = delete;
+		VirtualInputDevice& operator=(const VirtualInputDevice&) = delete;
+	};
 #endif
 
 	KeyPress::KeyPress(Key key, std::chrono::milliseconds from, std::chrono::milliseconds to) :
@@ -85,13 +162,27 @@ namespace aita
 		}
 
 		keybd_event(virtualKey, scan, KeyDown | KeyExtended, 0);
+		wait(duration);
+		keybd_event(virtualKey, scan, KeyUp | KeyExtended, 0);
+#else
+		const uint16_t evdevCode = toEvdevCode(key);
+
+		if (!wait(delay))
+		{
+			return;
+		}
+
+		const auto& device = VirtualInputDevice::instance();
+
+		device.sendEvent(EV_KEY, evdevCode, KeyDown);
+		device.sendEvent(EV_SYN, SYN_REPORT, 0);
 
 		wait(duration);
 
-		keybd_event(virtualKey, scan, KeyUp | KeyExtended, 0);
-		
-		LOGD("({}, {}, {}) executed", KeyChars[static_cast<size_t>(key)], from, to);
+		device.sendEvent(EV_KEY, evdevCode, KeyUp);
+		device.sendEvent(EV_SYN, SYN_REPORT, 0);
 #endif
+		LOGD("({}, {}, {}) executed", KeyChars[static_cast<size_t>(key)], from, to);
 	}
 
 	Keyboard::~Keyboard()

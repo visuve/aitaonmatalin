@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <bitset>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -20,4 +21,8 @@
 #if defined(_WIN32)
 #define NOMINMAX
 #include <Windows.h>
+#else
+#include <linux/uinput.h>
+#include <fcntl.h>
+#include <unistd.h>
 #endif
