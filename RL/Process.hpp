@@ -5,7 +5,7 @@ namespace aita
 	class Process
 	{	
 	public:
-		Process(const std::filesystem::path& path, const std::wstring& arguments);
+		Process(const std::filesystem::path& path, const std::string& arguments);
 		~Process();
 
 		void start();
@@ -24,11 +24,11 @@ namespace aita
 
 	private:
 		const std::filesystem::path _path;
-		std::wstring _arguments;
+		std::string _arguments;
 		std::jthread _thread;
 
 #ifdef WIN32
-		STARTUPINFOW _startupInfo;
+		STARTUPINFOA _startupInfo;
 		PROCESS_INFORMATION _processInformation;
 		HANDLE _outputReadHandle;
 		HANDLE _outputWriteHandle;

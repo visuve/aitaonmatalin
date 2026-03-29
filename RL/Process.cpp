@@ -3,14 +3,15 @@
 
 namespace aita
 {
+#ifdef WIN32
 	constexpr bool isValid(HANDLE handle)
 	{
 		return handle != nullptr && handle != INVALID_HANDLE_VALUE;
 	}
 
-	Process::Process(const std::filesystem::path& path, const std::wstring& arguments) :
+	Process::Process(const std::filesystem::path& path, const std::string& arguments) :
 		_path(path),
-		_arguments(std::format(L"{} {}", path.wstring(), arguments)),
+		_arguments(std::format("{} {}", path.string(), arguments)),
 		_outputReadHandle(INVALID_HANDLE_VALUE),
 		_outputWriteHandle(INVALID_HANDLE_VALUE)
 	{
@@ -30,8 +31,8 @@ namespace aita
 			throw std::runtime_error("Failed to set output pipe handle information.");
 		}
 
-		ZeroMemory(&_startupInfo, sizeof(STARTUPINFOW));
-		_startupInfo.cb = sizeof(STARTUPINFOW);
+		ZeroMemory(&_startupInfo, sizeof(STARTUPINFOA));
+		_startupInfo.cb = sizeof(STARTUPINFOA);
 		_startupInfo.hStdError = _outputWriteHandle;
 		_startupInfo.hStdOutput = _outputWriteHandle;
 		_startupInfo.hStdInput = nullptr;
@@ -70,8 +71,8 @@ namespace aita
 			throw std::runtime_error("Process is already created.");
 		}
 
-		if (!CreateProcessW(
-			_path.c_str(), // Application name
+		if (!CreateProcessA(
+			_path.string().c_str(), // Application name
 			_arguments.data(), // Command line
 			nullptr, // Process handle not inheritable
 			nullptr, // Thread handle not inheritable
@@ -195,5 +196,5 @@ namespace aita
 
 		return result == WAIT_OBJECT_0;
 	}
-
+#endif
 }

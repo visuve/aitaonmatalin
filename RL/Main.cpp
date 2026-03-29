@@ -479,6 +479,7 @@ namespace aita
 		}
 	}
 
+#ifdef WIN32
 	BOOL WINAPI consoleHandler(DWORD ctrlType)
 	{
 		if (ctrlType == CTRL_CLOSE_EVENT)
@@ -489,12 +490,16 @@ namespace aita
 
 		return FALSE;
 	}
+#endif
 }
 
 int main(int argc, char** argv)
 {
 #ifdef WIN32
 	SetConsoleCtrlHandler(aita::consoleHandler, TRUE);
+#else
+	constexpr int ERROR_BAD_ARGUMENTS = EINVAL;
+	constexpr int ERROR_CANCELLED = ECANCELED;
 #endif
 
 	aita::LOGI("aitaRL");
@@ -513,7 +518,7 @@ int main(int argc, char** argv)
 			throw std::runtime_error("Game executable not found: " + gamePath.string());
 		}
 
-		Process process(gamePath, std::format(L"--width={} --height={} --no-sound --loop", WindowWidth, WindowHeight));
+		Process process(gamePath, std::format("--width={} --height={} --no-sound --loop", WindowWidth, WindowHeight));
 
 		process.start();
 
