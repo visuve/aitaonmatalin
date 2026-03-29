@@ -30,9 +30,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 file(GLOB_RECURSE AITAONMATALIN_DQN_SRC "*.cpp" "*.hpp")
 
-if(CMAKE_SYSTEM_NAME MATCHES "Windows")
-	add_executable(aitaRL ${AITAONMATALIN_DQN_SRC})
+add_executable(aitaRL ${AITAONMATALIN_DQN_SRC})
 
+if(CMAKE_SYSTEM_NAME MATCHES "Windows")
 	file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")
 
 	add_custom_command(TARGET aitaRL
@@ -41,8 +41,21 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
 		${TORCH_DLLS}
 		$<TARGET_FILE_DIR:aitaRL>)
 else()
-	add_executable(aitaRL ${AITAONMATALIN_DQN_SRC})
+	set_target_properties(aitaRL PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE INSTALL_RPATH "$ORIGIN")
+
+	file(GLOB TORCH_SO_LIBS "${TORCH_INSTALL_PREFIX}/lib/*.so*")
+
+	add_custom_command(TARGET aitaRL
+		POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different
+		${TORCH_SO_LIBS}
+		$<TARGET_FILE_DIR:aitaRL>)
 endif()
 
 target_link_libraries(aitaRL PRIVATE ${TORCH_LIBRARIES})
+
+if(NOT CMAKE_SYSTEM_NAME MATCHES "Windows")
+	target_link_options(aitaRL PRIVATE "-static-libgcc" "-static-libstdc++")
+endif()
+
 target_precompile_headers(aitaRL PUBLIC "AitaRL.pch")

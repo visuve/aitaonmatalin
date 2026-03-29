@@ -497,9 +497,11 @@ int main(int argc, char** argv)
 {
 #ifdef WIN32
 	SetConsoleCtrlHandler(aita::consoleHandler, TRUE);
+	constexpr char GameFileName[] = "aitaonmatalin.exe";
 #else
 	constexpr int ERROR_BAD_ARGUMENTS = EINVAL;
 	constexpr int ERROR_CANCELLED = ECANCELED;
+	constexpr char GameFileName[] = "aitaonmatalin";
 #endif
 
 	aita::LOGI("aitaRL");
@@ -511,7 +513,7 @@ int main(int argc, char** argv)
 
 		Arguments arguments(argc, argv);
 
-		const std::filesystem::path gamePath = arguments.parentPath() / "aitaonmatalin.exe";
+		const std::filesystem::path gamePath = arguments.parentPath() / GameFileName;
 
 		if (!std::filesystem::exists(gamePath))
 		{
@@ -522,16 +524,15 @@ int main(int argc, char** argv)
 		{ 
 				std::format("--width={}", WindowWidth),
 				std::format("--height={}", WindowHeight),
-				"--no-sound"
+				"--no-sound",
 				"--loop"
 		});
 
 		process.start();
-
 #ifdef WIN32
 		ensureForegroundWindow(L"Aita on matalin - The Fence Jump Game");
-		process.redirect(parseGameState);
 #endif
+		process.redirect(parseGameState);
 
 		const std::string mode = arguments.get("--mode", "play");
 
