@@ -94,40 +94,6 @@ namespace aita
 		_outputWriteHandle = INVALID_HANDLE_VALUE;
 	}
 
-	void Process::redirect(std::function<void(std::string_view)> how)
-	{
-		_thread = std::jthread([this, how]()
-		{
-			try
-			{
-				while (isRunning())
-				{
-					const std::optional<std::string> output = read();
-
-					if (!output.has_value())
-					{
-						break;
-					}
-
-					const std::string value = output.value();
-
-					if (value.empty())
-					{
-						continue;
-					}
-
-					how(value);
-				}
-
-				LOGI("Process exited with code: {}", exitCode());
-			}
-			catch (const std::exception& ex)
-			{
-				LOGE("Error in process output redirection: {}", ex.what());
-			}
-		});
-	}
-
 	void Process::redirectTo(void* where)
 	{
 		const auto how = [where](std::string_view output)
@@ -189,9 +155,9 @@ namespace aita
 		return static_cast<int>(exitCode);
 	}
 
-	bool Process::waitForExit(uint32_t milliseconds) const
+	bool Process::waitForExit() const
 	{
-		DWORD result = WaitForSingleObject(_processInformation.hProcess, milliseconds);
+		DWORD result = WaitForSingleObject(_processInformation.hProcess, INFINITE);
 
 		if (result == WAIT_FAILED)
 		{
@@ -200,5 +166,245 @@ namespace aita
 
 		return result == WAIT_OBJECT_0;
 	}
+#else
+	Process::Process(const std::filesystem::path& path, const std::vector<std::string>& arguments) :
+		_path(path),
+		_arguments(arguments)
+	{
+		int pipefd[2];
+
+		if (pipe(pipefd) == -1)
+		{
+			throw std::runtime_error("Failed to create output pipe.");
+		}
+
+		_outputReadFd = pipefd[0];
+		_outputWriteFd = pipefd[1];
+	}
+
+	Process::~Process()
+	{
+		if (_outputReadFd >= 0)
+		{
+			close(_outputReadFd);
+		}
+
+		if (_outputWriteFd >= 0)
+		{
+			close(_outputWriteFd);
+		}
+	}
+
+	void Process::start()
+	{
+		if (_pid != -1)
+		{
+			throw std::runtime_error("Process is already created.");
+		}
+
+		_pid = fork();
+
+		if (_pid < 0)
+		{
+			throw std::runtime_error("Failed to fork process.");
+		}
+
+		if (_pid == 0) // Child process
+		{
+			dup2(_outputWriteFd, STDOUT_FILENO);
+			dup2(_outputWriteFd, STDERR_FILENO);
+			close(_outputReadFd);
+			close(_outputWriteFd);
+
+			std::vector<char*> argv;
+
+			std::string applicationName = _path.string();
+			argv.push_back(applicationName.data());
+
+			for (auto& s : _arguments)
+			{
+				argv.push_back(s.data());
+			}
+
+			argv.push_back(nullptr);
+
+			execv(applicationName.c_str(), argv.data());
+
+			exit(errno);
+		}
+
+		close(_outputWriteFd);
+		_outputWriteFd = -1;
+	}
+
+	void Process::redirectTo(void* where)
+	{
+		const auto how = [where](std::string_view output)
+		{
+			if (::write(fileno(reinterpret_cast<FILE*>(where)), output.data(), output.size()) < 0)
+			{
+				throw std::runtime_error("Failed to write to standard output.");
+			}
+		};
+
+		return redirect(how);
+	}
+
+	std::optional<std::string> Process::read()
+	{
+		constexpr size_t bufferSize = 0x1000;
+		thread_local char buffer[bufferSize];
+
+		ssize_t bytesRead = ::read(_outputReadFd, buffer, bufferSize - 1);
+
+		if (bytesRead > 0)
+		{
+			return std::string(buffer, bytesRead);
+		}
+
+		if (bytesRead == 0 || (bytesRead < 0 && errno != EAGAIN && errno != EINTR))
+		{
+			LOGI("Pipe closed");
+			return std::nullopt;
+		}
+
+		return "";
+	}
+
+	bool Process::isRunning() const
+	{
+		if (_exited)
+		{
+			return false;
+		}
+
+		int status = 0;
+		const pid_t result = waitpid(_pid, &status, WNOHANG);
+
+		switch (result)
+		{
+			case -1:
+			{
+				const int errorCode = errno;
+
+				if (errorCode == ECHILD)
+				{
+					_exited = true;
+					_exitCode = -1;
+					return false;
+				}
+
+				throw std::system_error(errorCode, std::generic_category(), "waitpid failed");
+			}
+			case 0:
+			{
+				return true;
+			}
+			default:
+			{
+				assert(result == _pid);
+
+				_exited = true;
+
+				if (WIFEXITED(status))
+				{
+					_exitCode = WEXITSTATUS(status);
+				}
+				else if (WIFSIGNALED(status))
+				{
+					_exitCode = WTERMSIG(status);
+				}
+				else
+				{
+					LOGE("Process exited with unknown status: {}", status);
+					_exitCode = -1;
+				}
+
+				return false;
+			}
+		}
+	}
+
+	void Process::terminate(int exitCode) const
+	{
+		if (!isRunning())
+		{
+			return;
+		}
+
+		if (kill(_pid, SIGKILL) == -1)
+		{
+			throw std::runtime_error("Failed to terminate process.");
+		}
+	}
+
+	int Process::exitCode() const
+	{
+		if (isRunning())
+		{
+			throw std::runtime_error("Process is still running. Exit code is not available.");
+		}
+
+		return _exitCode;
+	}
+
+	bool Process::waitForExit() const
+	{
+		if (!isRunning())
+		{
+			return true;
+		}
+
+		int status;
+
+		if (waitpid(_pid, &status, 0) == _pid)
+		{
+			_exited = true;
+
+			if (WIFEXITED(status))
+			{
+				_exitCode = WEXITSTATUS(status);
+			}
+			else if (WIFSIGNALED(status))
+			{
+				_exitCode = WTERMSIG(status);
+			}
+		}
+
+		return true;
+	}
 #endif
+	void Process::redirect(std::function<void(std::string_view)> how)
+	{
+		_thread = std::jthread([this, how]()
+		{
+			try
+			{
+				while (isRunning())
+				{
+					const std::optional<std::string> output = read();
+
+					if (!output.has_value())
+					{
+						break;
+					}
+
+					const std::string value = output.value();
+
+					if (value.empty())
+					{
+						continue;
+					}
+
+					how(value);
+				}
+
+				LOGI("Process exited with code: {}", exitCode());
+			}
+			catch (const std::exception& ex)
+			{
+				LOGE("Error in process output redirection: {}", ex.what());
+			}
+		});
+	}
 }

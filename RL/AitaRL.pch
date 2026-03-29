@@ -4,6 +4,7 @@
 #include <bitset>
 #include <chrono>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -12,9 +13,7 @@
 #include <print>
 #include <random>
 #include <ranges>
-#include <semaphore>
 #include <span>
-#include <sstream>
 #include <stdexcept>
 #include <thread>
 
@@ -22,7 +21,11 @@
 #define NOMINMAX
 #include <Windows.h>
 #else
-#include <linux/uinput.h>
 #include <fcntl.h>
+#include <cerrno>
+#include <linux/uinput.h>
+#include <poll.h>
+#include <sys/wait.h>
+#include <signal.h>
 #include <unistd.h>
 #endif

@@ -12,5 +12,5 @@ set(LIBRARY_OUTPUT_PATH "..")
 
 include(FetchContent)
 
-#add_subdirectory("Game")
+add_subdirectory("Game")
 add_subdirectory("RL")

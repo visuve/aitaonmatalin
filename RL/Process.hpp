@@ -15,7 +15,7 @@ namespace aita
 		bool isRunning() const;
 		void terminate(int) const;
 		int exitCode() const;
-		bool waitForExit(uint32_t milliseconds = 0xFFFFFFFF) const;
+		bool waitForExit() const;
 
 		inline operator bool() const
 		{
@@ -32,6 +32,12 @@ namespace aita
 		PROCESS_INFORMATION _processInformation;
 		HANDLE _outputReadHandle;
 		HANDLE _outputWriteHandle;
+#else
+		pid_t _pid = -1;
+		int _outputReadFd = -1;
+		int _outputWriteFd = -1;
+		mutable int _exitCode = 0;
+		mutable bool _exited = false;
 #endif
 	};
 }
