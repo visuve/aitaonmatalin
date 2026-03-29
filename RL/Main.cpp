@@ -34,19 +34,28 @@ namespace aita
 	std::atomic<bool> KeepRunning = true;
 	GameState State;
 
-	torch::Tensor toTensor(const GameState& state)
+	constexpr float VelocityScaleX = 5.0f;
+	constexpr float VelocityScaleY = 15.0f;
+
+	inline torch::Tensor toTensor(const GameState& state)
 	{
 		return torch::tensor({
 			state.posX / static_cast<float>(WindowWidth),
 			state.posY / static_cast<float>(WindowHeight),
-			state.velX / 5.0f, // 4 and -12.8 would be correct but add some breathing room
-			state.velY / 15.0f
+			state.velX / VelocityScaleX,
+			state.velY / VelocityScaleY
 		});
 	}
 
-	std::array<float, DQNStates> toArray(const GameState& state)
+	inline std::array<float, DQNStates> toArray(const GameState& state)
 	{
-		return { state.posX, state.posY, state.velX, state.velY };
+		return
+		{
+			state.posX / static_cast<float>(WindowWidth),
+			state.posY / static_cast<float>(WindowHeight),
+			state.velX / VelocityScaleX,
+			state.velY / VelocityScaleY
+		};
 	}
 
 	template <size_t S, size_t K, size_t T>
