@@ -572,6 +572,11 @@ int main(int argc, char** argv)
 		process.waitForExit();
 
 	}
+	catch (const std::system_error& ex)
+	{
+		aita::LOGE("A system error occurred: {} (code: {})", ex.what(), ex.code().value());
+		return ex.code().value();
+	}
 	catch (const std::exception& ex)
 	{
 		aita::LOGE("An exception occurred: {}", ex.what());

@@ -1,5 +1,6 @@
 #include "Keyboard.hpp"
 #include "Logger.hpp"
+#include "Handle.hpp"
 
 namespace aita
 {
@@ -69,27 +70,25 @@ namespace aita
 			ie.value = val;
 			gettimeofday(&ie.time, nullptr);
 
-			if (write(_fd, &ie, sizeof(ie)) < 0)
+			if (write(_deviceDescriptor, &ie, sizeof(ie)) < 0)
 			{
-				LOGW("Failed to send event: type={}, code={}", type, code);
+				LOGE("Failed to send event: type={}, code={}", type, code);
 			}
 		}
 
 	private:
-		int _fd = -1;
-
 		VirtualInputDevice() :
-			_fd(open("/dev/uinput", O_WRONLY | O_NONBLOCK))
+			_deviceDescriptor(open("/dev/uinput", O_WRONLY | O_NONBLOCK))
 		{
-			if (_fd < 0)
+			if (!_deviceDescriptor.isValid())
 			{
-				throw std::runtime_error("Failed to open /dev/uinput. Check permissions.");
+				throw std::system_error(errno, std::generic_category(), "Failed to open /dev/uinput");
 			}
 
-			ioctl(_fd, UI_SET_EVBIT, EV_KEY);
-			ioctl(_fd, UI_SET_KEYBIT, KEY_LEFT);
-			ioctl(_fd, UI_SET_KEYBIT, KEY_RIGHT);
-			ioctl(_fd, UI_SET_KEYBIT, KEY_SPACE);
+			ioctl(_deviceDescriptor, UI_SET_EVBIT, EV_KEY);
+			ioctl(_deviceDescriptor, UI_SET_KEYBIT, KEY_LEFT);
+			ioctl(_deviceDescriptor, UI_SET_KEYBIT, KEY_RIGHT);
+			ioctl(_deviceDescriptor, UI_SET_KEYBIT, KEY_SPACE);
 
 			struct uinput_setup usetup = {};
 			usetup.id.bustype = BUS_VIRTUAL;
@@ -98,23 +97,26 @@ namespace aita
 			usetup.id.version = 1;
 			strcpy(usetup.name, "aita_virtual_keyboard");
 
-			ioctl(_fd, UI_DEV_SETUP, &usetup);
-			ioctl(_fd, UI_DEV_CREATE);
+			ioctl(_deviceDescriptor, UI_DEV_SETUP, &usetup);
+			ioctl(_deviceDescriptor, UI_DEV_CREATE);
 
 			std::this_thread::sleep_for(std::chrono::milliseconds(50));
 		}
 
 		~VirtualInputDevice()
 		{
-			if (_fd >= 0)
+			if (_deviceDescriptor.isValid())
 			{
-				ioctl(_fd, UI_DEV_DESTROY);
-				close(_fd);
+				ioctl(_deviceDescriptor, UI_DEV_DESTROY);
 			}
 		}
 
 		VirtualInputDevice(const VirtualInputDevice&) = delete;
-		VirtualInputDevice& operator=(const VirtualInputDevice&) = delete;
+		VirtualInputDevice& operator = (const VirtualInputDevice&) = delete;
+		VirtualInputDevice(VirtualInputDevice&&) = delete;
+		VirtualInputDevice& operator = (VirtualInputDevice&&) = delete;
+
+		PosixHandle _deviceDescriptor;
 	};
 #endif
 

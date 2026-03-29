@@ -1,12 +1,13 @@
 #pragma once
 
+#include "Handle.hpp"
+
 namespace aita
 {
 	class Process
 	{	
 	public:
 		Process(const std::filesystem::path& path, const std::vector<std::string>& arguments);
-		~Process();
 
 		void start();
 		void redirect(std::function<void(std::string_view)> how);
@@ -28,14 +29,14 @@ namespace aita
 		std::jthread _thread;
 
 #ifdef WIN32
-		STARTUPINFOA _startupInfo;
-		PROCESS_INFORMATION _processInformation;
-		HANDLE _outputReadHandle;
-		HANDLE _outputWriteHandle;
+		WinHandle _processHandle;
+		WinHandle _threadHandle;
+		WinHandle _outputReadHandle;
+		WinHandle _outputWriteHandle;
 #else
 		pid_t _pid = -1;
-		int _outputReadFd = -1;
-		int _outputWriteFd = -1;
+		PosixHandle _outputReadDescriptor;
+		PosixHandle _outputWriteDescriptor;
 		mutable int _exitCode = 0;
 		mutable bool _exited = false;
 #endif

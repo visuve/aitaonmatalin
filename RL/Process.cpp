@@ -4,16 +4,9 @@
 namespace aita
 {
 #ifdef WIN32
-	constexpr bool isValid(HANDLE handle)
-	{
-		return handle != nullptr && handle != INVALID_HANDLE_VALUE;
-	}
-
 	Process::Process(const std::filesystem::path& path, const std::vector<std::string>& arguments) :
 		_path(path),
-		_arguments(arguments),
-		_outputReadHandle(INVALID_HANDLE_VALUE),
-		_outputWriteHandle(INVALID_HANDLE_VALUE)
+		_arguments(arguments)
 	{
 		SECURITY_ATTRIBUTES sa;
 		ZeroMemory(&sa, sizeof(SECURITY_ATTRIBUTES));
@@ -21,55 +14,34 @@ namespace aita
 		sa.bInheritHandle = TRUE;
 		sa.lpSecurityDescriptor = nullptr;
 
-		if (!CreatePipe(&_outputReadHandle, &_outputWriteHandle, &sa, 0))
+		if (!CreatePipe(_outputReadHandle.addressOf(), _outputWriteHandle.addressOf(), &sa, 0))
 		{
-			throw std::runtime_error("Failed to create output pipe.");
+			throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "Failed to create output pipe");
 		}
 
 		if (!SetHandleInformation(_outputReadHandle, HANDLE_FLAG_INHERIT, 0))
 		{
-			throw std::runtime_error("Failed to set output pipe handle information.");
-		}
-
-		ZeroMemory(&_startupInfo, sizeof(STARTUPINFOA));
-		_startupInfo.cb = sizeof(STARTUPINFOA);
-		_startupInfo.hStdError = _outputWriteHandle;
-		_startupInfo.hStdOutput = _outputWriteHandle;
-		_startupInfo.hStdInput = nullptr;
-		_startupInfo.dwFlags |= STARTF_USESTDHANDLES;
-
-		ZeroMemory(&_processInformation, sizeof(PROCESS_INFORMATION));
-	}
-
-	Process::~Process()
-	{
-		if (isValid(_processInformation.hProcess))
-		{
-			CloseHandle(_processInformation.hProcess);
-		}
-
-		if (isValid(_processInformation.hThread))
-		{
-			CloseHandle(_processInformation.hThread);
-		}
-
-		if (isValid(_outputReadHandle))
-		{
-			CloseHandle(_outputReadHandle);
-		}
-
-		if (isValid(_outputWriteHandle))
-		{
-			CloseHandle(_outputWriteHandle);
+			throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "Failed to set output pipe handle information");
 		}
 	}
 
 	void Process::start()
 	{
-		if (isValid(_processInformation.hProcess))
+		if (_processHandle.isValid())
 		{
 			throw std::runtime_error("Process is already created.");
 		}
+
+		STARTUPINFOA startupInfo;
+		ZeroMemory(&startupInfo, sizeof(STARTUPINFOA));
+		startupInfo.cb = sizeof(STARTUPINFOA);
+		startupInfo.hStdError = _outputWriteHandle;
+		startupInfo.hStdOutput = _outputWriteHandle;
+		startupInfo.hStdInput = nullptr;
+		startupInfo.dwFlags |= STARTF_USESTDHANDLES;
+
+		PROCESS_INFORMATION processInformation;
+		ZeroMemory(&processInformation, sizeof(PROCESS_INFORMATION));
 
 		const std::string applicationName = _path.string();
 		const auto view = std::views::join_with(_arguments, ' ');
@@ -84,14 +56,16 @@ namespace aita
 			0, // No creation flags
 			nullptr, // Use parent's environment
 			nullptr, // Use parent's current directory
-			&_startupInfo, // Startup info
-			&_processInformation)) // Process information
+			&startupInfo, // Startup info
+			&processInformation)) // Process information
 		{
-			throw std::runtime_error("Failed to start game process.");
+			throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "Failed to start game process.");
 		}
 
-		CloseHandle(_outputWriteHandle);
-		_outputWriteHandle = INVALID_HANDLE_VALUE;
+		// Take ownership of the process and thread handles
+		_processHandle.reset(processInformation.hProcess);
+		_threadHandle.reset(processInformation.hThread);
+		_outputWriteHandle.reset();
 	}
 
 	void Process::redirectTo(void* where)
@@ -100,7 +74,7 @@ namespace aita
 		{
 			if (!WriteFile(where, output.data(), static_cast<DWORD>(output.size()), nullptr, nullptr))
 			{
-				throw std::runtime_error("Failed to write to standard output.");
+				throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "Failed to write to output");
 			}
 		};
 
@@ -124,7 +98,7 @@ namespace aita
 				return std::nullopt;
 			}
 
-			throw std::runtime_error("Failed to read from process output pipe.");
+			throw std::system_error(static_cast<int>(error), std::system_category(), "Failed to read from process output pipe");
 		}
 
 		return std::string(buffer, bytesRead);
@@ -137,9 +111,9 @@ namespace aita
 
 	void Process::terminate(int exitCode) const
 	{
-		if (!TerminateProcess(_processInformation.hProcess, static_cast<UINT>(exitCode)))
+		if (!TerminateProcess(_processHandle, static_cast<UINT>(exitCode)))
 		{
-			throw std::runtime_error("Failed to terminate process.");
+			throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "Failed to terminate process");
 		}
 	}
 
@@ -147,9 +121,9 @@ namespace aita
 	{
 		DWORD exitCode = 0;
 
-		if (!GetExitCodeProcess(_processInformation.hProcess, &exitCode))
+		if (!GetExitCodeProcess(_processHandle, &exitCode))
 		{
-			throw std::runtime_error("Failed to get process exit code.");
+			throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "Failed to get process exit code");
 		}
 
 		return static_cast<int>(exitCode);
@@ -157,11 +131,11 @@ namespace aita
 
 	bool Process::waitForExit() const
 	{
-		DWORD result = WaitForSingleObject(_processInformation.hProcess, INFINITE);
+		DWORD result = WaitForSingleObject(_processHandle, INFINITE);
 
 		if (result == WAIT_FAILED)
 		{
-			throw std::runtime_error("Failed to wait for process exit.");
+			throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "Failed to wait for process exit");
 		}
 
 		return result == WAIT_OBJECT_0;
@@ -175,24 +149,11 @@ namespace aita
 
 		if (pipe(pipefd) == -1)
 		{
-			throw std::runtime_error("Failed to create output pipe.");
+			throw std::system_error(errno, std::system_category(), "Failed to create output pipe");
 		}
 
-		_outputReadFd = pipefd[0];
-		_outputWriteFd = pipefd[1];
-	}
-
-	Process::~Process()
-	{
-		if (_outputReadFd >= 0)
-		{
-			close(_outputReadFd);
-		}
-
-		if (_outputWriteFd >= 0)
-		{
-			close(_outputWriteFd);
-		}
+		_outputReadDescriptor.reset(pipefd[0]);
+		_outputWriteDescriptor.reset(pipefd[1]);
 	}
 
 	void Process::start()
@@ -204,37 +165,47 @@ namespace aita
 
 		_pid = fork();
 
-		if (_pid < 0)
+		switch (_pid)
 		{
-			throw std::runtime_error("Failed to fork process.");
-		}
-
-		if (_pid == 0) // Child process
-		{
-			dup2(_outputWriteFd, STDOUT_FILENO);
-			dup2(_outputWriteFd, STDERR_FILENO);
-			close(_outputReadFd);
-			close(_outputWriteFd);
-
-			std::vector<char*> argv;
-
-			std::string applicationName = _path.string();
-			argv.push_back(applicationName.data());
-
-			for (auto& s : _arguments)
+			case -1:
 			{
-				argv.push_back(s.data());
+				throw std::system_error(errno, std::system_category(), "Failed to fork process");
 			}
+			case 0: // Child process
+			{
+				if (_outputWriteDescriptor != STDOUT_FILENO)
+				{
+					dup2(_outputWriteDescriptor, STDOUT_FILENO);
+				}
 
-			argv.push_back(nullptr);
+				if (_outputWriteDescriptor != STDERR_FILENO)
+				{
+					dup2(_outputWriteDescriptor, STDERR_FILENO);
+				}
 
-			execv(applicationName.c_str(), argv.data());
+				_outputWriteDescriptor.reset();
+				_outputReadDescriptor.reset();
 
-			exit(errno);
+				std::vector<char*> argv;
+				std::string applicationName = _path.string();
+				argv.push_back(applicationName.data());
+
+				for (auto& s : _arguments)
+				{
+					argv.push_back(s.data());
+				}
+
+				argv.push_back(nullptr);
+
+				execv(applicationName.c_str(), argv.data());
+
+				exit(errno);
+			}
+			default: // Parent process
+			{
+				_outputWriteDescriptor.reset();
+			}
 		}
-
-		close(_outputWriteFd);
-		_outputWriteFd = -1;
 	}
 
 	void Process::redirectTo(void* where)
@@ -243,7 +214,7 @@ namespace aita
 		{
 			if (::write(fileno(reinterpret_cast<FILE*>(where)), output.data(), output.size()) < 0)
 			{
-				throw std::runtime_error("Failed to write to standard output.");
+				throw std::system_error(errno, std::system_category(), "Failed to write to output");
 			}
 		};
 
@@ -255,7 +226,7 @@ namespace aita
 		constexpr size_t bufferSize = 0x1000;
 		thread_local char buffer[bufferSize];
 
-		ssize_t bytesRead = ::read(_outputReadFd, buffer, bufferSize - 1);
+		ssize_t bytesRead = ::read(_outputReadDescriptor, buffer, bufferSize - 1);
 
 		if (bytesRead > 0)
 		{
@@ -334,7 +305,7 @@ namespace aita
 
 		if (kill(_pid, SIGKILL) == -1)
 		{
-			throw std::runtime_error("Failed to terminate process.");
+			throw std::system_error(errno, std::system_category(), "Failed to terminate process");
 		}
 	}
 
@@ -400,6 +371,10 @@ namespace aita
 				}
 
 				LOGI("Process exited with code: {}", exitCode());
+			}
+			catch (const std::system_error& ex)
+			{
+				LOGE("System error in process output redirection: {} (code: {})", ex.what(), ex.code().value());
 			}
 			catch (const std::exception& ex)
 			{
