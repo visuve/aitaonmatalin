@@ -518,7 +518,13 @@ int main(int argc, char** argv)
 			throw std::runtime_error("Game executable not found: " + gamePath.string());
 		}
 
-		Process process(gamePath, std::format("--width={} --height={} --no-sound --loop", WindowWidth, WindowHeight));
+		Process process(gamePath,
+		{ 
+				std::format("--width={}", WindowWidth),
+				std::format("--height={}", WindowHeight),
+				"--no-sound"
+				"--loop"
+		});
 
 		process.start();
 

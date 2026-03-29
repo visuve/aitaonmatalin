@@ -9,9 +9,9 @@ namespace aita
 		return handle != nullptr && handle != INVALID_HANDLE_VALUE;
 	}
 
-	Process::Process(const std::filesystem::path& path, const std::string& arguments) :
+	Process::Process(const std::filesystem::path& path, const std::vector<std::string>& arguments) :
 		_path(path),
-		_arguments(std::format("{} {}", path.string(), arguments)),
+		_arguments(arguments),
 		_outputReadHandle(INVALID_HANDLE_VALUE),
 		_outputWriteHandle(INVALID_HANDLE_VALUE)
 	{
@@ -71,9 +71,13 @@ namespace aita
 			throw std::runtime_error("Process is already created.");
 		}
 
+		const std::string applicationName = _path.string();
+		const auto view = std::views::join_with(_arguments, ' ');
+		std::string arguments = applicationName + ' ' + std::ranges::to<std::string>(view);
+
 		if (!CreateProcessA(
-			_path.string().c_str(), // Application name
-			_arguments.data(), // Command line
+			applicationName.c_str(), // Application name
+			arguments.data(), // Command line
 			nullptr, // Process handle not inheritable
 			nullptr, // Thread handle not inheritable
 			TRUE, // Inherit handles (for pipes)
