@@ -167,6 +167,8 @@ namespace aita
 		auto maxEndTime = std::chrono::steady_clock::now();
 		bool keysPressed = false;
 
+		const int maxSteps = (MaxKeyPressDuration - MinKeyPressDuration) / KeyPressResolution;
+
 		for (size_t i = 0; i < DQNKeys; ++i)
 		{
 			if (actions.test(i))
@@ -175,11 +177,12 @@ namespace aita
 				const float delayFloat = timings[i * 2];
 				const float durationFloat = timings[i * 2 + 1];
 
-				const float scaledDuration = MinKeyPressDuration.count() +
-					(durationFloat * (MaxKeyPressDuration.count() - MinKeyPressDuration.count()));
+				const int delaySteps = static_cast<int>(std::round(delayFloat * maxSteps));
+				const int durationSteps = static_cast<int>(std::round(durationFloat * maxSteps));
 
-				const auto delayTime = std::chrono::milliseconds(static_cast<int>(delayFloat * MaxKeyPressDuration.count()));
-				const auto durationTime = std::chrono::milliseconds(static_cast<int>(scaledDuration));
+				const auto delayTime = MinKeyPressDuration + (delaySteps * KeyPressResolution);
+				const auto durationTime = MinKeyPressDuration + (durationSteps * KeyPressResolution);
+
 				const auto endTime = std::chrono::steady_clock::now() + delayTime + durationTime;
 
 				keyboard << KeyPress(keyFromIndex(i), delayTime, delayTime + durationTime);

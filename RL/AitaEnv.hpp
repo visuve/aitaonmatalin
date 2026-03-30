@@ -23,6 +23,7 @@ namespace aita
 	constexpr float MinScore = 0.0f;
 	constexpr std::chrono::milliseconds MinKeyPressDuration = 100ms;
 	constexpr std::chrono::milliseconds MaxKeyPressDuration = DefaultEpisodeDuration / 2;
+	constexpr std::chrono::milliseconds KeyPressResolution = 50ms;
 
 	constexpr int32_t MaxEpisodeSteps = 600;
 	constexpr float ProgressWeight = 1000.0f;
