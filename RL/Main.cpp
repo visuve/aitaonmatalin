@@ -425,11 +425,6 @@ namespace aita
 						done);
 
 					optimizeNetwork(optContext);
-
-					if (replayBuffer.count() >= hp.batchSize)
-					{
-						epsilon = std::max(hp.epsilonMin, epsilon - hp.epsilonDecay);
-					}
 				}
 			}
 
@@ -458,9 +453,17 @@ namespace aita
 					State.reset();
 				}
 
-				if (trainingMode && episode % 10 == 0)
+				if (trainingMode)
 				{
-					saveSession(replayBuffer, checkpoint);
+					if (replayBuffer.count() >= hp.batchSize)
+					{
+						epsilon = std::max(hp.epsilonMin, epsilon - hp.epsilonDecay);
+					}
+
+					if (episode % 10 == 0)
+					{
+						saveSession(replayBuffer, checkpoint);
+					}
 				}
 			}
 			else
