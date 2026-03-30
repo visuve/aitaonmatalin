@@ -167,21 +167,23 @@ namespace aita
 		auto maxEndTime = std::chrono::steady_clock::now();
 		bool keysPressed = false;
 
-		const int maxSteps = (MaxKeyPressDuration - MinKeyPressDuration) / KeyPressResolution;
+		using FloatMs = std::chrono::duration<float, std::milli>;
+		const FloatMs range = MaxKeyPressDuration - MinKeyPressDuration;
 
 		for (size_t i = 0; i < DQNKeys; ++i)
 		{
 			if (actions.test(i))
 			{
 				keysPressed = true;
+
 				const float delayFloat = timings[i * 2];
 				const float durationFloat = timings[i * 2 + 1];
 
-				const int delaySteps = static_cast<int>(std::round(delayFloat * maxSteps));
-				const int durationSteps = static_cast<int>(std::round(durationFloat * maxSteps));
+				const auto delayTime = MinKeyPressDuration +
+					std::chrono::duration_cast<std::chrono::milliseconds>(range * delayFloat);
 
-				const auto delayTime = MinKeyPressDuration + (delaySteps * KeyPressResolution);
-				const auto durationTime = MinKeyPressDuration + (durationSteps * KeyPressResolution);
+				const auto durationTime = MinKeyPressDuration +
+					std::chrono::duration_cast<std::chrono::milliseconds>(range * durationFloat);
 
 				const auto endTime = std::chrono::steady_clock::now() + delayTime + durationTime;
 
@@ -396,18 +398,18 @@ namespace aita
 
 				std::array<float, DQNTimings> executedTimings;
 
+				constexpr int maxSteps = (MaxKeyPressDuration - MinKeyPressDuration) / KeyPressResolution;
+
 				for (size_t i = 0; i < DQNKeys; ++i)
 				{
-					if (isExploration)
-					{
-						executedTimings[i * 2] = random(FloatDist);
-						executedTimings[i * 2 + 1] = random(FloatDist);
-					}
-					else
-					{
-						executedTimings[i * 2] = timings[i * 2].item<float>();
-						executedTimings[i * 2 + 1] = timings[i * 2 + 1].item<float>();
-					}
+					const size_t delayIndex = i * 2;
+					const size_t durationIndex = delayIndex + 1;
+
+					const float rawDelay = isExploration ? random(FloatDist) : timings[delayIndex].item<float>();
+					const float rawDuration = isExploration ? random(FloatDist) : timings[durationIndex].item<float>();
+
+					executedTimings[delayIndex] = std::round(rawDelay * maxSteps) / static_cast<float>(maxSteps);
+					executedTimings[durationIndex] = std::round(rawDuration * maxSteps) / static_cast<float>(maxSteps);
 				}
 
 				nextState = executeActionAndWait(actionBitmask, executedTimings);
