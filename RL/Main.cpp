@@ -268,8 +268,8 @@ namespace aita
 
 		torch::Tensor expectedStateActionValues = rewardBatch + (ctx.hp.gamma * nextStateValues);
 		torch::Tensor qLoss = torch::nn::functional::smooth_l1_loss(stateActionValues, expectedStateActionValues);
-
 		torch::Tensor mask = torch::zeros({ batchSize, static_cast<int64_t>(T) }, torch::kFloat32);
+
 		for (size_t i = 0; i < batchSize; ++i)
 		{
 			std::bitset<K> actions(static_cast<uint64_t>(actionBatch[i][0].item<int64_t>()));
@@ -289,7 +289,10 @@ namespace aita
 			executedTimingsBatch,
 			torch::nn::functional::MSELossFuncOptions().reduction(torch::kNone)
 		);
-		timingLoss = (timingLoss * mask).sum() / mask.sum().clamp_min(1.0f);
+
+		torch::Tensor rewardWeights = rewardBatch.clamp_min(0.0f).unsqueeze(1);
+
+		timingLoss = (timingLoss * mask * rewardWeights).sum() / (mask * rewardWeights).sum().clamp_min(1.0f);
 
 		torch::Tensor totalLoss = qLoss + timingLoss;
 
