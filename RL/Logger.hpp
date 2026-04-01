@@ -32,7 +32,8 @@ namespace aita
 			}();
 
 			const auto now = std::chrono::floor<std::chrono::milliseconds>(std::chrono::system_clock::now());
-			std::print(stream, "[{:%FT%TZ}][{}] ", now, Level);
+			const std::chrono::zoned_time localTime(std::chrono::current_zone(), now );
+			std::print(stream, "[{:%FT%T%z}][{}] ", localTime, Level);
 			std::println(stream, fmt, std::forward<Args>(args)...);
 		}
 
