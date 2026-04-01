@@ -55,13 +55,13 @@ namespace aita
 	constexpr int64_t DQNTimings = DQNKeys * 2;
 
 	constexpr std::chrono::seconds DefaultTimeout = std::chrono::hours(1);
-	constexpr uint32_t DefaultReplayBufferSize = 10000;
+	constexpr uint32_t DefaultReplayBufferSize = 1'000'000;
 	constexpr float DefaultEpsilonStart = 1.0f;
 	constexpr float DefaultEpsilonMin = 0.05f;
 	constexpr float DefaultEpsilonDecay = 0.0004f;
 	constexpr uint32_t DefaultBatchSize = 128;
 	constexpr float DefaultGamma = 0.99f;
-	constexpr float DefaultLearningRate = 0.0001f;
+	constexpr float DefaultLearningRate = 0.00005f;
 
 	inline std::uniform_real_distribution<float> FloatDist(0.0f, 1.0f);
 	inline std::uniform_int_distribution<int64_t> ActionDist(0, DQNActions - 1);

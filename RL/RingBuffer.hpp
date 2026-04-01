@@ -19,6 +19,9 @@ namespace aita
 			}
 
 			_data.resize(_size);
+
+			const float megabytes = static_cast<float>(_size * sizeof(T)) / (1024.0f * 1024.0f);
+			LOGI("RingBuffer initialized: {} elements, {:.2f} MB", _size, megabytes);
 		}
 
 		void push(const T& value)
