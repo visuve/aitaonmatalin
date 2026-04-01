@@ -32,14 +32,34 @@ namespace aita
 			}();
 
 			const auto now = std::chrono::floor<std::chrono::milliseconds>(std::chrono::system_clock::now());
-			const std::chrono::zoned_time localTime(std::chrono::current_zone(), now );
-			std::print(stream, "[{:%FT%T%z}][{}] ", localTime, Level);
-			std::println(stream, fmt, std::forward<Args>(args)...);
+			const std::chrono::zoned_time localTime(std::chrono::current_zone(), now);
+
+			const std::string message = std::format(fmt, std::forward<Args>(args)...);
+			std::println(stream, "[{:%FT%T%z}][{}] {}", localTime, Level, message);
+
+			if (_file)
+			{
+				std::println(_file, "[{:%FT%T%z}][{}] {}", localTime, Level, message);
+			}
 		}
 
 	private:
-		Logger() = default;
+		Logger()
+		{
+			const auto now = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
+			const std::chrono::zoned_time localTime(std::chrono::current_zone(), now);
+			const std::string fileName = std::format("aita_{:%Y-%m-%d_%H-%M-%S}.log", localTime);
+
+			_file.open(fileName);
+
+			if (!_file)
+			{
+				throw std::runtime_error(std::format("Failed to open log file: {}", fileName));
+			}
+		}
+
 		std::mutex _mutex;
+		std::ofstream _file;
 	};
 
 	inline constexpr struct

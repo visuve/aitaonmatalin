@@ -436,6 +436,12 @@ namespace aita
 				}
 			}
 
+			LOGI("Step {} | X: {:.2f} | Y: {:.2f} | Reward: {:.2f}",
+				step,
+				nextState.posX,
+				nextState.posY,
+				reward);
+
 			if (done)
 			{
 				++episode;
@@ -444,14 +450,13 @@ namespace aita
 				const auto remaining = std::max(std::chrono::seconds(0),
 					std::chrono::duration_cast<std::chrono::seconds>(maximumExecTime - now));
 
-				LOGI("Episode {} | Result: {} | Score: {:.2f} | Ticks: {} | Epsilon: {:.5f} | Buffer: {}/{} | Time Left: {:%T}",
+				LOGI("Episode: {} | Result: {} | Score: {:.2f} | Ticks: {} | Epsilon: {:.5f} | Buffer: {:.2f}% | Time Left: {:%T}",
 					episode,
 					(nextState.result == Result::Won ? "Won" : "Lost"),
 					reward,
 					tick,
 					epsilon,
-					replayBuffer.count(),
-					hp.replayBufferSize,
+					(static_cast<float>(replayBuffer.count()) / hp.replayBufferSize) * 100.0f,
 					remaining);
 
 				tick = 0;
@@ -473,14 +478,6 @@ namespace aita
 						saveSession(replayBuffer, checkpoint);
 					}
 				}
-			}
-			else
-			{
-				LOGI("Step {} | X: {:.2f} | Y: {:.2f} | Reward: {:.2f}",
-					step,
-					nextState.posX,
-					nextState.posY,
-					reward);
 			}
 		}
 
