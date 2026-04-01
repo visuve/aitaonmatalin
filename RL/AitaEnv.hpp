@@ -15,19 +15,21 @@ namespace aita
 
 	constexpr std::chrono::seconds DefaultEpisodeDuration = 10s;
 	constexpr std::chrono::seconds DefaultEpisodeTimeout = DefaultEpisodeDuration + 1s;
+
 	constexpr int32_t WindowWidth = 640;
 	constexpr int32_t WindowHeight = 480;
 	constexpr float StartingPosX = 0.0f;
 	constexpr float StartingPosY = 520.0f; // With screen resolution 640x480 this is the start value
-	constexpr float MaxScore = std::chrono::duration_cast<std::chrono::milliseconds>(DefaultEpisodeDuration).count();
-	constexpr float MinScore = 0.0f;
+
 	constexpr std::chrono::milliseconds MinKeyPressDuration = 100ms;
 	constexpr std::chrono::milliseconds MaxKeyPressDuration = DefaultEpisodeDuration / 2;
 	constexpr std::chrono::milliseconds KeyPressResolution = 50ms;
 
 	constexpr int32_t MaxEpisodeSteps = 600;
 	constexpr float ProgressWeight = 1000.0f;
-	constexpr float GoalBonus = 1000.0f;
+	constexpr float ZoneWidth = 100.0f;
+	constexpr float ZoneBonus = 2000.0f;
+	constexpr float GoalBonus = 10000.0f;
 	constexpr float KeyPressPenalty = 5.0f;
 
 	class GameState

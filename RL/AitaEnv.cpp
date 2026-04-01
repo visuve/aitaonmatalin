@@ -64,23 +64,37 @@ namespace aita
 
 	float GameState::calculateStepReward(const GameState& current, const GameState& next, float actions)
 	{
-		const float deltaRatio = (next.posX - current.posX) / (float)WindowWidth;
-		const float progress = (deltaRatio > 0.0f) ? (deltaRatio * ProgressWeight) : -1.0f;
-		return progress - (actions * KeyPressPenalty);
+		float stepReward = -1.0f;
+
+		stepReward -= (actions * KeyPressPenalty);
+
+		const float deltaRatio = (next.posX - current.posX) / static_cast<float>(WindowWidth);
+
+		if (deltaRatio > 0.0f)
+		{
+			stepReward += (deltaRatio * ProgressWeight);
+		}
+
+		const int currentZone = static_cast<int>(std::max(0.0f, current.posX) / ZoneWidth);
+		const int nextZone = static_cast<int>(std::max(0.0f, next.posX) / ZoneWidth);
+
+		if (nextZone > currentZone)
+		{
+			stepReward += ZoneBonus;
+		}
+
+		return stepReward;
 	}
 
 	float GameState::calculateEpisodeReward(const GameState& state, int32_t steps)
 	{
-		const float progressRatio = std::clamp(state.posX / (float)WindowWidth, 0.0f, 1.0f);
-		const float baseScore = progressRatio * ProgressWeight;
-
 		if (state.result == Result::Won)
 		{
-			const float efficiency = std::max(0, MaxEpisodeSteps - steps) * 2.0f;
-			return (baseScore + GoalBonus + efficiency) * 2.0f;
+			const float efficiency = std::max(0, MaxEpisodeSteps - steps) * 5.0f;
+			return GoalBonus + efficiency;
 		}
 
-		return baseScore;
+		return 0.0f; 
 	}
 
 	void HyperParameters::parse(const Arguments& arguments)
