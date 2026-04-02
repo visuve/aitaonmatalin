@@ -226,6 +226,42 @@ namespace aita
 	};
 
 	template <size_t S, size_t K, size_t T>
+	void sampleStratifiedBatch(
+		const RingBuffer<Transition<S, K, T>>& replayBuffer,
+		std::vector<Transition<S, K, T>>& batch,
+		size_t batchSize)
+	{
+		const size_t priorityCount = batchSize / 4;
+		const size_t uniformCount = batchSize - priorityCount;
+
+		std::span<Transition<S, K, T>> batchSpan(batch);
+
+		replayBuffer.randomSample(batchSpan.subspan(0, uniformCount));
+
+		size_t found = 0;
+		size_t attempts = 0;
+		const size_t maxAttempts = priorityCount * 100;
+
+		while (found < priorityCount && attempts < maxAttempts)
+		{
+			attempts++;
+			replayBuffer.randomSample(batchSpan.subspan(uniformCount + found, 1));
+
+			const auto& candidate = batch[uniformCount + found];
+
+			if (candidate.reward >= GoalBonus)
+			{
+				found++;
+			}
+		}
+
+		if (found < priorityCount)
+		{
+			replayBuffer.randomSample(batchSpan.subspan(uniformCount + found, priorityCount - found));
+		}
+	}
+
+	template <size_t S, size_t K, size_t T>
 	void optimizeNetwork(OptimizationContext<S, K, T>& ctx)
 	{
 		if (ctx.replayBuffer.count() < ctx.hp.batchSize)
@@ -233,7 +269,7 @@ namespace aita
 			return;
 		}
 
-		ctx.replayBuffer.randomSample(ctx.batch);
+		sampleStratifiedBatch(ctx.replayBuffer, ctx.batch, ctx.hp.batchSize);
 
 		const int64_t batchSize = ctx.hp.batchSize;
 		torch::Tensor prevStateBatch = torch::empty({ batchSize, static_cast<int64_t>(S) }, torch::kFloat32);
