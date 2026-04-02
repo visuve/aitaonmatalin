@@ -34,9 +34,6 @@ namespace aita
 	std::atomic<bool> KeepRunning = true;
 	GameState State;
 
-	constexpr float VelocityScaleX = 5.0f;
-	constexpr float VelocityScaleY = 15.0f;
-
 	inline torch::Tensor toTensor(const GameState& state)
 	{
 		return torch::tensor({
@@ -351,6 +348,19 @@ namespace aita
 		}
 	}
 
+	float simpleMovingAverage(std::deque<float>& recentRewards, float newReward)
+	{
+		recentRewards.push_back(newReward);
+
+		if (recentRewards.size() > SmaWindowSize)
+		{
+			recentRewards.pop_front();
+		}
+
+		const float sum = std::accumulate(recentRewards.begin(), recentRewards.end(), 0.0f);
+		return sum / static_cast<float>(recentRewards.size());
+	}
+
 	void run(bool trainingMode, Process& process, HyperParameters& hp)
 	{
 		auto network = std::make_shared<DQN>(DQNStates, DQNActions, DQNTimings);
@@ -372,6 +382,7 @@ namespace aita
 				torch::optim::AdamOptions(hp.learningRate));
 
 		float epsilon = trainingMode ? hp.epsilonStart : 0.00f;
+		int32_t tick = 0;
 		int64_t step = 0;
 		int64_t episode = 0;
 
@@ -409,7 +420,7 @@ namespace aita
 			return std::chrono::steady_clock::now() < maximumExecTime;
 		};
 
-		int32_t tick = 0;
+		std::deque<float> recentRewards;
 
 		while (KeepRunning && timeLeft())
 		{
@@ -486,10 +497,11 @@ namespace aita
 				const auto remaining = std::max(std::chrono::seconds(0),
 					std::chrono::duration_cast<std::chrono::seconds>(maximumExecTime - now));
 
-				LOGI("Episode: {} | Result: {} | Score: {:.2f} | Ticks: {} | Epsilon: {:.5f} | Buffer: {:.2f}% | Time Left: {:%T}",
+				LOGI("Episode: {} | Result: {} | Score: {:.2f} | SMA: {:.2f} | Ticks: {} | Epsilon: {:.5f} | Buffer: {:.2f}% | Time Left: {:%T}",
 					episode,
 					(nextState.result == Result::Won ? "Won" : "Lost"),
 					reward,
+					simpleMovingAverage(recentRewards, reward),
 					tick,
 					epsilon,
 					(static_cast<float>(replayBuffer.count()) / hp.replayBufferSize) * 100.0f,

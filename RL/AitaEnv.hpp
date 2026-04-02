@@ -20,6 +20,8 @@ namespace aita
 	constexpr int32_t WindowHeight = 480;
 	constexpr float StartingPosX = 0.0f;
 	constexpr float StartingPosY = 520.0f; // With screen resolution 640x480 this is the start value
+	constexpr float VelocityScaleX = 5.0f; // To normalize velX closer to [-1, 1]
+	constexpr float VelocityScaleY = 15.0f; // To normalize velY closer to [-1, 1]
 
 	constexpr std::chrono::milliseconds MinKeyPressDuration = 100ms;
 	constexpr std::chrono::milliseconds MaxKeyPressDuration = DefaultEpisodeDuration / 2;
@@ -65,6 +67,8 @@ namespace aita
 
 	inline std::uniform_real_distribution<float> FloatDist(0.0f, 1.0f);
 	inline std::uniform_int_distribution<int64_t> ActionDist(0, DQNActions - 1);
+
+	constexpr size_t SmaWindowSize = 100;
 
 	class HyperParameters
 	{
