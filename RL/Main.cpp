@@ -2,7 +2,7 @@
 #include "Keyboard.hpp"
 #include "Process.hpp"
 #include "RL.hpp"
-#include "RingBuffer.hpp"
+#include "MultiRingBuffer.hpp"
 #include "Logger.hpp"
 
 namespace aita
@@ -55,8 +55,8 @@ namespace aita
 		};
 	}
 
-	template <size_t S, size_t K, size_t T>
-	void loadSession(bool trainingMode, RingBuffer<Transition<S, K, T>>& replayBuffer, Checkpoint& checkpoint)
+	template <size_t S, size_t K, size_t T, size_t N>
+	void loadSession(bool trainingMode, MultiRingBuffer<Transition<S, K, T>, N>& replayBuffer, Checkpoint& checkpoint)
 	{
 		if (checkpoint.load())
 		{
@@ -84,8 +84,8 @@ namespace aita
 		}
 	}
 
-	template <size_t S, size_t K, size_t T>
-	void saveSession(const RingBuffer<Transition<S, K, T>>& replayBuffer, const Checkpoint& checkpoint)
+	template <size_t S, size_t K, size_t T, size_t N>
+	void saveSession(const MultiRingBuffer<Transition<S, K, T>, N>& replayBuffer, const Checkpoint& checkpoint)
 	{
 		if (checkpoint.save())
 		{
@@ -211,64 +211,29 @@ namespace aita
 		return State;
 	}
 
-	template <size_t S, size_t K, size_t T>
+	template <size_t S, size_t K, size_t T, size_t N>
 	struct OptimizationContext
 	{
 		std::shared_ptr<DQN> network;
 		std::shared_ptr<DQN> targetNetwork;
 		std::shared_ptr<torch::optim::Optimizer> optimizer;
-		RingBuffer<Transition<S, K, T>>& replayBuffer;
+		MultiRingBuffer<Transition<S, K, T>, N>& memory;
 		std::vector<Transition<S, K, T>>& batch;
-		const HyperParameters& hp;
+		const HyperParameters& params;
 	};
 
-	template <size_t S, size_t K, size_t T>
-	void sampleStratifiedBatch(
-		const RingBuffer<Transition<S, K, T>>& replayBuffer,
-		std::vector<Transition<S, K, T>>& batch,
-		size_t batchSize)
+	template <size_t S, size_t K, size_t T, size_t N>
+	void optimizeNetwork(OptimizationContext<S, K, T, N>& ctx)
 	{
-		const size_t priorityCount = batchSize / 4;
-		const size_t uniformCount = batchSize - priorityCount;
-
-		std::span<Transition<S, K, T>> batchSpan(batch);
-
-		replayBuffer.randomSample(batchSpan.subspan(0, uniformCount));
-
-		size_t found = 0;
-		size_t attempts = 0;
-		const size_t maxAttempts = priorityCount * 100;
-
-		while (found < priorityCount && attempts < maxAttempts)
-		{
-			attempts++;
-			replayBuffer.randomSample(batchSpan.subspan(uniformCount + found, 1));
-
-			const auto& candidate = batch[uniformCount + found];
-
-			if (candidate.reward >= GoalBonus)
-			{
-				found++;
-			}
-		}
-
-		if (found < priorityCount)
-		{
-			replayBuffer.randomSample(batchSpan.subspan(uniformCount + found, priorityCount - found));
-		}
-	}
-
-	template <size_t S, size_t K, size_t T>
-	void optimizeNetwork(OptimizationContext<S, K, T>& ctx)
-	{
-		if (ctx.replayBuffer.count() < ctx.hp.batchSize)
+		if (!ctx.memory.isReadyForBatch(ctx.params.batchSize))
 		{
 			return;
 		}
 
-		sampleStratifiedBatch(ctx.replayBuffer, ctx.batch, ctx.hp.batchSize);
+		std::span<Transition<S, K, T>> batchSpan(ctx.batch);
+		ctx.memory.sampleBatch(batchSpan);
 
-		const int64_t batchSize = ctx.hp.batchSize;
+		const int64_t batchSize = ctx.params.batchSize;
 		torch::Tensor prevStateBatch = torch::empty({ batchSize, static_cast<int64_t>(S) }, torch::kFloat32);
 		torch::Tensor nextStateBatch = torch::empty({ batchSize, static_cast<int64_t>(S) }, torch::kFloat32);
 		torch::Tensor actionBatch = torch::empty({ batchSize, 1 }, torch::kInt64);
@@ -301,7 +266,7 @@ namespace aita
 			nextStateValues.masked_fill_(doneBatch, 0.0f);
 		}
 
-		torch::Tensor expectedStateActionValues = rewardBatch + (ctx.hp.gamma * nextStateValues);
+		torch::Tensor expectedStateActionValues = rewardBatch + (ctx.params.gamma * nextStateValues);
 		torch::Tensor qLoss = torch::nn::functional::smooth_l1_loss(stateActionValues, expectedStateActionValues);
 		torch::Tensor mask = torch::zeros({ batchSize, static_cast<int64_t>(T) }, torch::kFloat32);
 
@@ -397,12 +362,12 @@ namespace aita
 			}
 		};
 
-		RingBuffer<Transition<DQNStates, DQNKeys, DQNTimings>> replayBuffer(hp.replayBufferSize);
+		MultiRingBuffer<Transition<DQNStates, DQNKeys, DQNTimings>, MultiRingBufferSize> replayBuffer(hp.replayBufferSize);
 		std::vector<Transition<DQNStates, DQNKeys, DQNTimings>> batch(hp.batchSize);
 		Checkpoint checkpoint("aita_dqn.pt", context);
 		GameState currentState;
 
-		OptimizationContext<DQNStates, DQNKeys, DQNTimings> optContext{
+		OptimizationContext<DQNStates, DQNKeys, DQNTimings, MultiRingBufferSize> optContext{
 			network,
 			targetNetwork,
 			optimizer,
@@ -471,13 +436,36 @@ namespace aita
 
 				if (trainingMode)
 				{
-					replayBuffer.emplace(
-						toArray(currentState),
-						actionBitmask,
-						executedTimings,
-						reward,
-						toArray(nextState),
-						done);
+					if (reward < 0.0f)
+					{
+						replayBuffer.emplace<0>(
+							toArray(currentState),
+							actionBitmask,
+							executedTimings,
+							reward,
+							toArray(nextState),
+							done);
+					}
+					else if (reward < GoalBonus)
+					{
+						replayBuffer.emplace<1>(
+							toArray(currentState),
+							actionBitmask,
+							executedTimings,
+							reward,
+							toArray(nextState),
+							done);
+					}
+					else
+					{
+						replayBuffer.emplace<2>(
+							toArray(currentState),
+							actionBitmask,
+							executedTimings,
+							reward,
+							toArray(nextState),
+							done);
+					}
 
 					optimizeNetwork(optContext);
 				}
@@ -497,14 +485,15 @@ namespace aita
 				const auto remaining = std::max(std::chrono::seconds(0),
 					std::chrono::duration_cast<std::chrono::seconds>(maximumExecTime - now));
 
-				LOGI("Episode: {} | Result: {} | Score: {:.2f} | SMA: {:.2f} | Ticks: {} | Epsilon: {:.5f} | Buffer: {:.2f}% | Time Left: {:%T}",
+				LOGI("Episode {} | Result: {} | Score: {:.2f} | Ticks: {} | Epsilon: {:.5f} | Buffers: {}/{}/{} | Time Left: {:%T}",
 					episode,
 					(nextState.result == Result::Won ? "Won" : "Lost"),
 					reward,
-					simpleMovingAverage(recentRewards, reward),
 					tick,
 					epsilon,
-					(static_cast<float>(replayBuffer.count()) / hp.replayBufferSize) * 100.0f,
+					replayBuffer.count<0>(),
+					replayBuffer.count<1>(),
+					replayBuffer.count<2>(),
 					remaining);
 
 				tick = 0;
@@ -516,7 +505,7 @@ namespace aita
 
 				if (trainingMode)
 				{
-					if (replayBuffer.count() >= hp.batchSize)
+					if (replayBuffer.isReadyForBatch(hp.batchSize))
 					{
 						epsilon = std::max(hp.epsilonMin, epsilon - hp.epsilonDecay);
 					}

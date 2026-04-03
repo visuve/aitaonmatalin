@@ -34,6 +34,8 @@ namespace aita
 	constexpr float GoalBonus = 10000.0f;
 	constexpr float KeyPressPenalty = 5.0f;
 
+	constexpr size_t MultiRingBufferSize = 3;
+
 	class GameState
 	{
 	public:
