@@ -226,20 +226,31 @@ namespace aita
 		constexpr size_t bufferSize = 0x1000;
 		thread_local char buffer[bufferSize];
 
-		ssize_t bytesRead = ::read(_outputReadDescriptor, buffer, bufferSize - 1);
+		const ssize_t bytesRead = ::read(_outputReadDescriptor, buffer, bufferSize - 1);
 
-		if (bytesRead > 0)
+		switch (bytesRead)
 		{
-			return std::string(buffer, bytesRead);
-		}
+			case -1:
+			{
+				const int errorCode = errno;
 
-		if (bytesRead == 0 || (bytesRead < 0 && errno != EAGAIN && errno != EINTR))
-		{
-			LOGI("Pipe closed");
-			return std::nullopt;
-		}
+				if (errorCode == EAGAIN || errorCode == EWOULDBLOCK || errorCode == EINTR)
+				{
+					return "";
+				}
 
-		return "";
+				throw std::system_error(errorCode, std::system_category(), "Failed to read from process output pipe");
+			}
+			case 0:
+			{
+				LOGI("Pipe closed");
+				return std::nullopt;
+			}
+			default:
+			{
+				return std::string(buffer, static_cast<size_t>(bytesRead));
+			}
+		}
 	}
 
 	bool Process::isRunning() const
