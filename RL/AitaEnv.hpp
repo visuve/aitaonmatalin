@@ -35,6 +35,9 @@ namespace aita
 	constexpr float KeyPressPenalty = 5.0f;
 
 	constexpr size_t MultiRingBufferSize = 3;
+	constexpr size_t Good = 2;
+	constexpr size_t Bad = 1;
+	constexpr size_t Ugly = 0;
 
 	class GameState
 	{

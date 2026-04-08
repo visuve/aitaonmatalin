@@ -231,7 +231,7 @@ namespace aita
 		}
 
 		std::span<Transition<S, K, T>> batchSpan(ctx.batch);
-		ctx.memory.sampleBatch(batchSpan);
+		ctx.memory.sampleStratifiedBatch(batchSpan);
 
 		const int64_t batchSize = ctx.params.batchSize;
 		torch::Tensor prevStateBatch = torch::empty({ batchSize, static_cast<int64_t>(S) }, torch::kFloat32);
@@ -438,7 +438,7 @@ namespace aita
 				{
 					if (reward < 0.0f)
 					{
-						replayBuffer.emplace<0>(
+						replayBuffer.emplace<Ugly>(
 							toArray(currentState),
 							actionBitmask,
 							executedTimings,
@@ -448,7 +448,7 @@ namespace aita
 					}
 					else if (reward < GoalBonus)
 					{
-						replayBuffer.emplace<1>(
+						replayBuffer.emplace<Bad>(
 							toArray(currentState),
 							actionBitmask,
 							executedTimings,
@@ -458,7 +458,7 @@ namespace aita
 					}
 					else
 					{
-						replayBuffer.emplace<2>(
+						replayBuffer.emplace<Good>(
 							toArray(currentState),
 							actionBitmask,
 							executedTimings,
@@ -491,9 +491,9 @@ namespace aita
 					reward,
 					tick,
 					epsilon,
-					replayBuffer.count<0>(),
-					replayBuffer.count<1>(),
-					replayBuffer.count<2>(),
+					replayBuffer.count<Ugly>(),
+					replayBuffer.count<Bad>(),
+					replayBuffer.count<Good>(),
 					remaining);
 
 				tick = 0;

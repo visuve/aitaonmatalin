@@ -85,28 +85,18 @@ namespace aita
 
 		bool isReadyForBatch(size_t batchSize) const
 		{
-			const size_t baseSize = batchSize / N;
-			const size_t remainder = batchSize % N;
-
-			for (size_t i = 0; i < N; ++i)
-			{
-				const size_t required = baseSize + (i == N - 1 ? remainder : 0);
-
-				if (_counts[i] < required)
-				{
-					return false;
-				}
-			}
-
-			return true;
+			return std::ranges::none_of(_counts, [](size_t c) { return c == 0; });
 		}
 
-		void sampleBatch(std::span<T> batch) const
+		void sampleStratifiedBatch(std::span<T> batch) const
 		{
 			const size_t baseSize = batch.size() / N;
 			const size_t remainder = batch.size() % N;
 
 			size_t offset = 0;
+
+			thread_local std::random_device device;
+			thread_local std::mt19937 engine(device());
 
 			for (size_t i = 0; i < N; ++i)
 			{
@@ -117,15 +107,12 @@ namespace aita
 					continue;
 				}
 
-				thread_local std::random_device device;
-				thread_local std::mt19937 engine(device());
+				std::uniform_int_distribution<size_t> dist(0, _counts[i] - 1);
 
-				std::sample(
-					_data[i].begin(),
-					_data[i].begin() + static_cast<std::ptrdiff_t>(_counts[i]),
-					batch.begin() + offset,
-					count,
-					engine);
+				for (size_t j = 0; j < count; ++j)
+				{
+					batch[offset + j] = _data[i][dist(engine)];
+				}
 
 				offset += count;
 			}
